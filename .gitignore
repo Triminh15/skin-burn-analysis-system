@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.env
+venv/
+env/
+data/raw/*
+data/processed/*
+knowledge_base/chroma_db/*
+outputs/checkpoints/*
+*.pth
+*.pt
+*.h5
+.ipynb_checkpoints/
+.DS_Store
+Thumbs.db
