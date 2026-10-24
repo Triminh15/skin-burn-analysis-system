@@ -1,0 +1,49 @@
+# ==============================================================================
+# Skin Burn Analysis System - Requirements
+# ==============================================================================
+
+# --- Deep Learning & Computer Vision ---
+# PyTorch & Torchvision (Phù hợp cả môi trường CPU lẫn CUDA)
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Kiến trúc mô hình Phân đoạn ảnh (U-Net, Linknet, FPN với backbone ResNet)
+segmentation-models-pytorch>=0.3.3
+
+# Tăng cường dữ liệu ảnh & mask đồng thời
+albumentations>=1.4.0
+
+# Thị giác máy tính & Xử lý ảnh cơ bản
+opencv-python>=4.8.0
+Pillow>=10.0.0
+
+# Foundation Model hỗ trợ sinh Mask từ Bounding Box (FastSAM / MobileSAM)
+ultralytics>=8.1.0
+
+# --- Xử lý Dữ liệu, Đồ thị & Thống kê ---
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tqdm>=4.66.0
+
+# --- Medical RAG (Retrieval-Augmented Generation) & Vector Database ---
+chromadb>=0.4.22
+sentence-transformers>=2.3.0
+rank-bm25>=0.2.2
+pypdf>=4.0.0
+
+# --- AI Agent & LLM (Google Gemini) ---
+google-generativeai>=0.4.0
+python-dotenv>=1.0.0
+
+# --- Giải thích mô hình & Bảo mật Y tế ---
+grad-cam>=1.5.0
+piexif>=1.1.3
+
+# --- Giao diện Web Ứng dụng & Triển khai ---
+streamlit>=1.31.0
+
+# --- Kiểm thử tự động ---
+pytest>=8.0.0
