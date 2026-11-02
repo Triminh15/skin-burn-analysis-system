@@ -189,7 +189,7 @@ def process_burn_image(
 # ==============================================================================
 
 def generate_roi_dataset(
-    root_dir: str = "d:/burn_analysis",
+    root_dir: str = ".",
     output_roi_dir: str = "data/processed/rois",
     splits: List[str] = None,
     padding_ratio: float = 0.15,

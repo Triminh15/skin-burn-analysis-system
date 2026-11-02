@@ -27,7 +27,7 @@ class SkinBurnDataset(Dataset):
     def __init__(
         self,
         csv_path: str,
-        root_dir: str = "d:/burn_analysis",
+        root_dir: str = ".",
         transform: Optional[A.Compose] = None,
     ):
         self.root_dir = root_dir
@@ -38,6 +38,15 @@ class SkinBurnDataset(Dataset):
             raise FileNotFoundError(f"Không tìm thấy file danh sách dữ liệu: {csv_path}")
 
         self.df = pd.read_csv(csv_path)
+        # Tự động loại bỏ các hàng thiếu file ảnh hoặc mask (phòng hộ lỗi)
+        if "image_path" in self.df.columns and "mask_path" in self.df.columns:
+            valid = self.df.apply(
+                lambda r: os.path.exists(os.path.join(self.root_dir, r["image_path"]))
+                and os.path.exists(os.path.join(self.root_dir, r["mask_path"])),
+                axis=1
+            )
+            self.df = self.df[valid].reset_index(drop=True)
+
         self.transform = transform
 
     def __len__(self) -> int:
@@ -102,7 +111,7 @@ class SkinBurnDataset(Dataset):
 def get_dataloaders(
     train_csv: str = "data/splits/train.csv",
     val_csv: str = "data/splits/val.csv",
-    root_dir: str = "d:/burn_analysis",
+    root_dir: str = ".",
     img_size: int = 256,
     batch_size: int = 16,
     num_workers: int = 0,

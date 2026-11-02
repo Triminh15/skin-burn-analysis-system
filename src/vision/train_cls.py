@@ -78,7 +78,7 @@ class BurnROIDataset(Dataset):
     def __init__(
         self,
         csv_path: str,
-        root_dir: str = "d:/burn_analysis",
+        root_dir: str = ".",
         transform: Optional[A.Compose] = None
     ):
         self.root_dir = root_dir
