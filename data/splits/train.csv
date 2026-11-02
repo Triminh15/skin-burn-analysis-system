@@ -235,7 +235,6 @@ img328,data/processed/images/img328.jpg,data/processed/masks/img328.png,183,275,
 img934,data/processed/images/img934.jpg,data/processed/masks/img934.png,275,183,1,0,0,0.0
 img1158,data/processed/images/img1158.jpg,data/processed/masks/img1158.png,259,194,4,1,5908,11.76
 img914,data/processed/images/img914.jpg,data/processed/masks/img914.png,258,195,1,1,10935,21.74
-img1424,data/processed/images/img1424.jpg,data/processed/masks/img1424.png,272,185,2,2,18610,36.98
 img1314,data/processed/images/img1314.jpg,data/processed/masks/img1314.png,225,225,1,0,2064,4.08
 img884,data/processed/images/img884.jpg,data/processed/masks/img884.png,194,259,2,2,5859,11.66
 img25,data/processed/images/img25.jpg,data/processed/masks/img25.png,275,183,2,0,4827,9.59
@@ -271,7 +270,6 @@ img666,data/processed/images/img666.jpg,data/processed/masks/img666.png,225,225,
 img1345,data/processed/images/img1345.jpg,data/processed/masks/img1345.png,258,195,1,0,27284,54.23
 img421,data/processed/images/img421.jpg,data/processed/masks/img421.png,194,259,3,1,2896,5.76
 img611,data/processed/images/img611.jpg,data/processed/masks/img611.png,300,168,1,0,14569,28.91
-img1132,data/processed/images/img1132.jpg,data/processed/masks/img1132.png,202,249,4,1,1081,2.15
 img331,data/processed/images/img331.jpg,data/processed/masks/img331.png,275,183,2,0,14025,27.87
 img414,data/processed/images/img414.jpg,data/processed/masks/img414.png,232,217,2,0,3206,6.37
 img207,data/processed/images/img207.jpg,data/processed/masks/img207.png,252,200,1,0,10421,20.68
