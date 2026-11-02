@@ -7,9 +7,12 @@ data/raw/*
 data/processed/*
 knowledge_base/chroma_db/*
 outputs/checkpoints/*
+experiments/*
 *.pth
 *.pt
 *.h5
+*.zip
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db
+
