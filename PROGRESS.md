@@ -72,21 +72,47 @@
 
 ---
 
-## 🚀 PHẦN 3: CÔNG VIỆC TIẾP THEO CẦN LÀM (KHI QUAY LẠI LÀM TIẾP)
+## 🛠️ PHẦN 3: HOÀN THIỆN PHÂN HỆ THỊ GIÁC MÁY TÍNH (VISION PIPELINE - 100%)
 
-Khi bắt đầu phiên làm việc tiếp theo, chúng ta sẽ bước ngay vào **Giai đoạn Huấn luyện Mô hình Thị giác (Bước 4)**:
+Toàn bộ mã nguồn cốt lõi của Phân hệ Thị giác đã được lập trình hoàn chỉnh, kiểm thử đơn vị thành công và commit trên nhánh `train_vision`:
 
-1. **Xây dựng Hàm mất mát y khoa (`src/vision/losses.py`):**
-   * Hiện thực hóa `ComboLoss = 0.5 * BCEWithLogitsLoss + 0.5 * SoftDiceLoss`.
-   * Giúp mô hình vừa học xác suất từng điểm ảnh (BCE), vừa tối ưu độ trùng khớp diện tích (Dice) chống mất cân bằng giữa vùng bỏng và nền.
-2. **Xây dựng Bộ chỉ số đo lường (`src/vision/metrics.py`):**
-   * Lập trình tính toán **Dice Score (F1)** và **IoU (Intersection over Union / Jaccard Index)**.
-3. **Khởi tạo Mô hình U-Net (`src/vision/models.py`):**
-   * Định nghĩa kiến trúc `smp.Unet(encoder_name="resnet34", encoder_weights="imagenet", in_channels=3, classes=1)`.
-   * Khởi tạo khung phân loại `ResNet-50 Classifier` cho bài toán xếp độ bỏng sau này.
-4. **Viết Script huấn luyện U-Net (`src/vision/train_seg.py`):**
-   * Xây dựng Training Loop chuẩn: Optimizer (AdamW), Learning Rate Scheduler (CosineAnnealingLR).
-   * Cơ chế **Early Stopping** và **Model Checkpoint Manager** (tự động lưu trọng số tốt nhất vào `outputs/checkpoints/best_unet.pth`).
-   * Xuất đồ thị Loss và Dice curves sau khi train vào `outputs/figures/`.
-5. **Tiền xử lý ROI (`src/vision/postprocessing.py`):**
-   * Dùng mask dự đoán của U-Net để crop chính xác vùng vết thương kèm padding, loại bỏ 100% da lành để đưa vào ResNet phân loại.
+1. ✅ **Hàm mất mát Y khoa ([src/vision/losses.py](file:///d:/burn_analysis/src/vision/losses.py)):**
+   - Phân đoạn: `ComboLoss` (Baseline) và `FocalTverskyLoss` (SOTA - Phạt nặng bỏ sót vết thương, tập trung viền mờ).
+   - Phân loại: `Weighted Cross-Entropy` và `ClassBalancedFocalLoss` kết hợp `Label Smoothing`.
+2. ✅ **Bộ chỉ số đo lường lâm sàng ([src/vision/metrics.py](file:///d:/burn_analysis/src/vision/metrics.py)):**
+   - Phân đoạn: `Dice Score (F1)`, `IoU (Jaccard)`, `Pixel Accuracy` kèm `SegmentationMetricTracker`.
+   - Phân loại: `Overall Accuracy`, `Macro F1-Score`, `Recall Bỏng Độ 3` (Chỉ số ca nặng), và `Confusion Matrix`.
+3. ✅ **Định nghĩa Kiến trúc Mô hình ([src/vision/models.py](file:///d:/burn_analysis/src/vision/models.py)):**
+   - Hỗ trợ U-Net, U-Net++ với backbone ResNet-34, ConvNeXt-Tiny và cơ chế Attention Gate scSE.
+   - Hỗ trợ bộ phân loại ResNet-34 và ConvNeXt-Tiny (Dropout 20% chống overfit).
+4. ✅ **Hậu xử lý & Tập dữ liệu ROI ([src/vision/postprocessing.py](file:///d:/burn_analysis/src/vision/postprocessing.py)):**
+   - Lọc nhiễu hình thái học, tìm Bounding Box và cắt ảnh ROI có đệm an toàn 15% (Square Padding).
+   - Tính tỷ lệ diện tích tổn thương (% TBSA).
+   - **Đã sinh toàn bộ 1.227 ảnh ROI** tại `data/processed/rois/` và tạo 3 file danh mục: `train_roi.csv` (858 ảnh), `val_roi.csv` (182 ảnh), `test_roi.csv` (187 ảnh).
+5. ✅ **Script Huấn luyện Phân đoạn ([src/vision/train_seg.py](file:///d:/burn_analysis/src/vision/train_seg.py)):**
+   - Hỗ trợ tham số dòng lệnh linh hoạt, Early Stopping, Checkpoint Manager, vẽ đồ thị Curves và tự động đánh giá trên tập Test độc lập.
+6. ✅ **Script Huấn luyện Phân loại ([src/vision/train_cls.py](file:///d:/burn_analysis/src/vision/train_cls.py)):**
+   - Huấn luyện trên tập ROI đã cắt, Early Stopping dựa trên Macro F1, xuất đồ thị và vẽ Ma trận nhầm lẫn (Confusion Matrix Heatmap).
+
+---
+
+## 🚀 PHẦN 4: MA TRẬN 7 THỰC NGHIỆM SẴN SÀNG KHỞI CHẠY (EXPERIMENT ROADMAP)
+
+### GIAI ĐOẠN 1: PHÂN ĐOẠN (SEGMENTATION) - 4 RUNS
+* **Run 1 (Bạn):** Baseline `U-Net (ResNet-34) + ComboLoss`
+  `python src/vision/train_seg.py --arch unet --backbone resnet34 --loss combo --epochs 35 --batch-size 16 --run-name unet_resnet34_combo`
+* **Run 2 (Bạn):** Ablation Loss `U-Net (ResNet-34) + Focal Tversky`
+  `python src/vision/train_seg.py --arch unet --backbone resnet34 --loss focal_tversky --epochs 35 --batch-size 16 --run-name unet_resnet34_focal_tversky`
+* **Run 3 (Bạn phụ):** Ablation Backbone `U-Net (ConvNeXt-Tiny) + Focal Tversky`
+  `python src/vision/train_seg.py --arch unet --backbone tu-convnext_tiny --loss focal_tversky --epochs 35 --batch-size 8 --run-name unet_convnext_focal_tversky`
+* **Run 4 (Bạn phụ):** SOTA `Attention U-Net (ConvNeXt-Tiny) + Focal Tversky`
+  `python src/vision/train_seg.py --arch unet --backbone tu-convnext_tiny --attention scse --loss focal_tversky --epochs 35 --batch-size 8 --run-name att_unet_convnext_focal_tversky`
+
+### GIAI ĐOẠN 2: PHÂN LOẠI (CLASSIFICATION) - 3 RUNS
+* **Run 5 (Bạn):** Baseline `ResNet-34 + Weighted CE`
+  `python src/vision/train_cls.py --model resnet34 --loss weighted_ce --epochs 30 --batch-size 16 --run-name cls_resnet34_weighted_ce`
+* **Run 6 (Bạn):** Ablation Loss `ResNet-34 + CB-Focal + Label Smoothing`
+  `python src/vision/train_cls.py --model resnet34 --loss cb_focal --epochs 30 --batch-size 16 --run-name cls_resnet34_cb_focal`
+* **Run 7 (Bạn phụ):** SOTA `ConvNeXt-Tiny + CB-Focal + Label Smoothing`
+  `python src/vision/train_cls.py --model convnext_tiny --loss cb_focal --epochs 30 --batch-size 16 --run-name cls_convnext_cb_focal`
+
