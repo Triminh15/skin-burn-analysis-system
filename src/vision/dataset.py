@@ -40,6 +40,15 @@ class SkinBurnDataset(Dataset):
             raise FileNotFoundError(f"Không tìm thấy file danh sách dữ liệu: {csv_path}")
 
         self.df = pd.read_csv(csv_path)
+        # Tự động loại bỏ các hàng thiếu file ảnh hoặc mask (phòng hộ lỗi)
+        if "image_path" in self.df.columns and "mask_path" in self.df.columns:
+            valid = self.df.apply(
+                lambda r: os.path.exists(os.path.join(self.root_dir, r["image_path"]))
+                and os.path.exists(os.path.join(self.root_dir, r["mask_path"])),
+                axis=1
+            )
+            self.df = self.df[valid].reset_index(drop=True)
+
         self.transform = transform
 
     def __len__(self) -> int:
