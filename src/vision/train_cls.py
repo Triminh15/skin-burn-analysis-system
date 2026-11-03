@@ -78,12 +78,12 @@ class BurnROIDataset(Dataset):
     def __init__(
         self,
         csv_path: str,
-        root_dir: str = "d:/burn_analysis",
+        root_dir: Optional[str] = None,
         transform: Optional[A.Compose] = None
     ):
-        self.root_dir = root_dir
+        self.root_dir = root_dir if root_dir is not None else PROJECT_ROOT
         if not os.path.isabs(csv_path):
-            csv_path = os.path.join(root_dir, csv_path)
+            csv_path = os.path.join(self.root_dir, csv_path)
 
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Không tìm thấy file danh sách ROI: {csv_path}")

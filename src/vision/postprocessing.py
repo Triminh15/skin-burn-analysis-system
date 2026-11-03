@@ -19,6 +19,9 @@ if sys.platform.startswith("win"):
     except Exception:
         pass
 
+# Đảm bảo thư mục gốc dự án luôn được xác định động
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -189,12 +192,14 @@ def process_burn_image(
 # ==============================================================================
 
 def generate_roi_dataset(
-    root_dir: str = "d:/burn_analysis",
+    root_dir: Optional[str] = None,
     output_roi_dir: str = "data/processed/rois",
     splits: List[str] = None,
     padding_ratio: float = 0.15,
     target_size: Tuple[int, int] = (224, 224)
 ):
+    if root_dir is None:
+        root_dir = PROJECT_ROOT
     """
     Quét qua các file split (train.csv, val.csv, test.csv), cắt sẵn toàn bộ ảnh ROI
     bằng Mask chuẩn và lưu vào thư mục data/processed/rois/.
