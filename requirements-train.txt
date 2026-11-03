@@ -1,0 +1,16 @@
+# ==============================================================================
+# Vision Training Requirements (Google Colab / Kaggle / Dedicated GPU)
+# Tối ưu hóa: Chỉ cài các thư viện phục vụ huấn luyện Thị giác máy tính
+# (Tránh xung đột protobuf/chromadb/google-cloud trên môi trường Colab)
+# ==============================================================================
+
+segmentation-models-pytorch>=0.3.3
+timm>=0.9.0
+albumentations>=1.4.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+tqdm>=4.66.0
+scikit-learn>=1.3.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0

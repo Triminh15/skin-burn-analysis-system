@@ -13,6 +13,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+
 from src.vision.transforms import get_train_transforms, get_val_transforms
 
 
@@ -27,12 +29,12 @@ class SkinBurnDataset(Dataset):
     def __init__(
         self,
         csv_path: str,
-        root_dir: str = ".",
+        root_dir: Optional[str] = None,
         transform: Optional[A.Compose] = None,
     ):
-        self.root_dir = root_dir
+        self.root_dir = root_dir if root_dir is not None else PROJECT_ROOT
         if not os.path.isabs(csv_path):
-            csv_path = os.path.join(root_dir, csv_path)
+            csv_path = os.path.join(self.root_dir, csv_path)
 
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Không tìm thấy file danh sách dữ liệu: {csv_path}")
@@ -111,7 +113,7 @@ class SkinBurnDataset(Dataset):
 def get_dataloaders(
     train_csv: str = "data/splits/train.csv",
     val_csv: str = "data/splits/val.csv",
-    root_dir: str = ".",
+    root_dir: Optional[str] = None,
     img_size: int = 256,
     batch_size: int = 16,
     num_workers: int = 0,
