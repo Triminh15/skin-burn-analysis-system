@@ -1,9 +1,9 @@
 # 📋 BÁO CÁO TIẾN ĐỘ & TỔNG KẾT DỰ ÁN (PROJECT PROGRESS & HANDOVER)
 
 * **Dự án:** Skin Burn Analysis System (Hệ thống Phân tích Vết bỏng Đa phương thái)
-* **Nhánh Git hiện tại:** `clean_data`
-* **Thời gian cập nhật:** 24/10/2026
-* **Trạng thái:** ✅ **Giai đoạn Dữ liệu (Data Engineering & Augmentation) đã hoàn tất 100%**
+* **Nhánh Git hiện tại:** `train_classification`
+* **Thời gian cập nhật:** 06/11/2026
+* **Trạng thái:** ✅ **TOÀN BỘ 7 THỰC NGHIỆM THỊ GIÁC (PHÂN ĐOẠN & PHÂN LOẠI) ĐÃ HOÀN TẤT 100%!**
 
 ---
 
@@ -115,4 +115,41 @@ Toàn bộ mã nguồn cốt lõi của Phân hệ Thị giác đã được l�
   `python src/vision/train_cls.py --model resnet34 --loss cb_focal --epochs 30 --batch-size 16 --run-name cls_resnet34_cb_focal`
 * **Run 7 (Bạn phụ):** SOTA `ConvNeXt-Tiny + CB-Focal + Label Smoothing`
   `python src/vision/train_cls.py --model convnext_tiny --loss cb_focal --epochs 30 --batch-size 16 --run-name cls_convnext_cb_focal`
+
+---
+
+## 🏆 PHẦN 5: BẢNG KẾT QUẢ NGHIỆM THU CHÍNH THỨC TOÀN BỘ 7 RUN THỰC NGHIỆM (TEST SET: 187 ẢNH)
+
+### 1. Bảng tổng hợp Giai đoạn 1: Phân đoạn vết bỏng (Segmentation)
+Đánh giá khách quan trên 187 ảnh Test:
+
+| Run | Kiến trúc & Cấu hình | Hàm Loss | Test Dice (%) | Test IoU (%) | Test Pixel Acc (%) | Tham số | Nhận xét lâm sàng & Học thuật |
+| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| **Run 1** | U-Net (ResNet-34) | ComboLoss | 65.19% | 48.36% | 86.41% | 24.44M | Mốc Baseline chuẩn mực |
+| **Run 2** | **U-Net (ResNet-34)** 🏆 | **Focal Tversky** | **65.07%** | **48.23%** | **86.72%** | 24.44M | **Mô hình vô địch Phân đoạn:** Test Loss thấp nhất (0.2413), bắt biên mờ chuẩn nhất |
+| **Run 3** | U-Net (ConvNeXt-Tiny) | Focal Tversky | 63.60% | 46.63% | 85.90% | 29.45M | Hiện tượng Overfitting nhẹ do dữ liệu y tế nhỏ |
+| **Run 4** | Att U-Net (ConvNeXt-Tiny + scSE) | Focal Tversky | 61.57% | 44.48% | 85.12% | 29.47M | Kết quả âm tính giá trị: scSE triệt tiêu quá mức quầng ban đỏ ngoại vi |
+
+### 2. Bảng tổng hợp Giai đoạn 2: Phân loại cấp độ bỏng (Classification - 3 Classes)
+Đánh giá khách quan trên 187 ảnh Test ROI:
+
+| Run | Mô hình & Cấu hình | Hàm Loss | Accuracy (%) | Macro F1 (%) | Recall Độ 3 (%) | Test Loss | Thời gian | Vai trò trong hệ thống |
+| :---: | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Run 5** | **ResNet-34** 🏆 | **Weighted CE** | **79.14%** | **79.08%** | **79.41%** | 0.6540 | 3.85 ph | **Mô hình chính thức (Production Champion):** Cân bằng xuất sắc mọi chỉ số |
+| **Run 6** | ResNet-34 | CB-Focal + Label Smoothing | 74.33% | 73.58% | 64.71% | **0.2366** | 3.59 ph | Hiệu chuẩn xác suất tốt nhất (Confidence Calibration) |
+| **Run 7** | ConvNeXt-Tiny | CB-Focal + Label Smoothing | 65.24% | 65.73% | **85.29%** 🔥 | 0.2591 | 8.36 ph | **Chuyên gia Cấp cứu Triage:** Độ nhạy ca bỏng nặng cao nhất (85.29%) |
+
+---
+
+## 🎯 PHẦN 6: ĐỊNH HƯỚNG CÁC GIAI ĐOẠN TIẾP THEO (NEXT STEPS)
+
+1. **Giai đoạn 3: Trích xuất bản đồ nhiệt Grad-CAM (XAI - Explainable AI)**
+   - Xây dựng module `src/utils/gradcam.py` để trực quan hóa vùng chú ý của mô hình phân loại trên ảnh ROI.
+2. **Giai đoạn 4: Hệ thống RAG & AI Agent Y tế (Medical Chatbot)**
+   - Nạp phác đồ cấp cứu bỏng của Bộ Y tế Việt Nam vào ChromaDB.
+   - Xây dựng AI Agent kết hợp Gemini để tính toán công thức bù dịch Parkland, gợi ý dinh dưỡng và chuyển tuyến.
+3. **Giai đoạn 5: Ứng dụng Web hoàn chỉnh (Streamlit App)**
+   - Ghép nối trọn vẹn: Upload ảnh $\rightarrow$ U-Net khoanh vùng + tính % TBSA $\rightarrow$ Cắt ROI $\rightarrow$ ResNet-34 phân loại $\rightarrow$ Grad-CAM minh bạch $\rightarrow$ Chatbot bác sĩ tư vấn.
+4. **Giai đoạn 6: Hoàn thiện Báo cáo Đồ án (9 Chương Học thuật)**
+
 
