@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - ER Triage</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container-lowest": "#ffffff",
+          "surface-container-high": "#e8e8ed",
+          "on-tertiary-fixed-variant": "#93000a",
+          "surface-bright": "#f9f9fe",
+          "tertiary": "#bb0011",
+          "on-primary-fixed-variant": "#004493",
+          "secondary": "#006e28",
+          "surface-dim": "#d9dade",
+          "background": "#f9f9fe",
+          "on-primary-container": "#fefcff",
+          "secondary-fixed": "#95f99d",
+          "outline-variant": "#c1c6d7",
+          "surface-container": "#ededf2",
+          "on-primary-fixed": "#001a41",
+          "secondary-fixed-dim": "#79dc84",
+          "primary-container": "#0070eb",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed": "#002107",
+          "secondary-container": "#95f99d",
+          "outline": "#717786",
+          "on-tertiary-container": "#fffbff",
+          "surface-variant": "#e2e2e7",
+          "primary-fixed-dim": "#adc6ff",
+          "error-container": "#ffdad6",
+          "on-secondary": "#ffffff",
+          "tertiary-fixed": "#ffdad6",
+          "surface": "#f9f9fe",
+          "surface-tint": "#005bc1",
+          "on-surface-variant": "#414755",
+          "primary": "#0058bc",
+          "inverse-primary": "#adc6ff",
+          "inverse-surface": "#2e3034",
+          "on-error": "#ffffff",
+          "error": "#ba1a1a",
+          "inverse-on-surface": "#f0f0f5",
+          "surface-container-highest": "#e2e2e7",
+          "on-tertiary-fixed": "#410002",
+          "tertiary-container": "#e6171e",
+          "primary-fixed": "#d8e2ff",
+          "on-primary": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "on-secondary-fixed-variant": "#00531d",
+          "on-surface": "#1a1c1f",
+          "on-secondary-container": "#00752b",
+          "on-background": "#1a1c1f",
+          "surface-container-low": "#f3f3f8",
+          "tertiary-fixed-dim": "#ffb4ab"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-xl": "1.5rem",
+          "margin": "1.5rem",
+          "space-lg": "1rem",
+          "space-xs": "0.25rem",
+          "gutter": "1rem",
+          "space-md": "0.75rem"
+        },
+        "fontFamily": {
+          "headline-md": ["Inter"],
+          "headline-xl": ["Inter"],
+          "body-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "caption": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"]
+        },
+        "fontSize": {
+          "headline-md": ["17px", {"lineHeight": "22px", "fontWeight": "600"}],
+          "headline-xl": ["32px", {"lineHeight": "38px", "fontWeight": "700"}],
+          "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+          "body-lg": ["17px", {"lineHeight": "22px", "fontWeight": "400"}],
+          "headline-lg": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+          "label-sm": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+          "caption": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+          "label-md": ["15px", {"lineHeight": "20px", "fontWeight": "600"}]
+        }
+      },
+    },
+  }
+</script>
+<style>
+  @layer base {
+    html {
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+  .glass-light {
+    background: rgba(249, 249, 249, 0.75);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .glass-bottom {
+    background: rgba(249, 249, 249, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .segmented-control {
+    background: rgba(120, 120, 128, 0.14);
+    border-radius: 8px;
+    padding: 2px;
+    display: inline-flex;
+  }
+</style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+</head>
+<body class="bg-background text-on-background min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TOP FROSTED GLASS BAR (Exact height: h-14 / 56px) -->
+<header class="fixed top-0 left-0 right-0 z-50 glass-light">
+<div class="h-14 px-margin flex items-center justify-between max-w-7xl mx-auto">
+<!-- Brand & Clinical Badge -->
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[20px]">local_fire_department</span>
+</div>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-md text-headline-md tracking-tight text-on-surface">BurnScan</span>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Navigation -->
+<nav class="segmented-control" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-xs" id="app-nav">
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-ket-qua-do-sau" href="#">Kết quả: Độ sâu</a>
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-giai-thich-mo-hinh-grad-cam" href="#">Giải thích (Grad-CAM)</a>
+</nav>
+<!-- Right: Segmented Role + System Readiness Status -->
+<div class="flex items-center gap-space-md">
+<div class="segmented-control hidden sm:inline-flex">
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all" type="button">Bệnh nhân</button>
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all" type="button">Bác sĩ</button>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1 rounded-full bg-surface-container-lowest/80 border border-outline-variant/30 shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mô hình sẵn sàng</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT SLOT: Buffer pt-14 matches Header h-14 exactly, pb-16 clears fixed footer -->
+<main class="pt-14 pb-16 min-h-[calc(100vh-56px)] max-w-7xl mx-auto px-margin"><div class="flex flex-col w-full font-body-md text-on-surface">
+<!-- TOP PROCESS / STEPPER BAR -->
+<section class="w-full pt-4 pb-3">
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<span class="font-caption text-caption uppercase tracking-wider text-outline">Quy trình phân tích</span>
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">4 bước chẩn đoán khẩn cấp</span>
+</div>
+<!-- 4 Stepper Items -->
+<ol class="flex items-center w-full md:w-auto gap-2 sm:gap-4 overflow-x-auto">
+<!-- Step 1 -->
+<li class="flex items-center gap-2 shrink-0">
+<span class="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center font-label-sm">
+<span class="material-symbols-outlined text-[16px] font-bold">check</span>
+</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant hidden sm:inline">1. Tải ảnh</span>
+</li>
+<li class="w-6 h-0.5 bg-secondary-fixed shrink-0"></li>
+<!-- Step 2 -->
+<li class="flex items-center gap-2 shrink-0">
+<span class="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center font-label-sm">
+<span class="material-symbols-outlined text-[16px] font-bold">check</span>
+</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant hidden sm:inline">2. Thông tin &amp; hiệu chuẩn</span>
+</li>
+<li class="w-6 h-0.5 bg-secondary-fixed shrink-0"></li>
+<!-- Step 3 -->
+<li class="flex items-center gap-2 shrink-0">
+<span class="w-7 h-7 rounded-full bg-secondary-fixed text-on-secondary-fixed flex items-center justify-center font-label-sm">
+<span class="material-symbols-outlined text-[16px] font-bold">check</span>
+</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant hidden sm:inline">3. Phân tích</span>
+</li>
+<li class="w-6 h-0.5 bg-primary-fixed shrink-0"></li>
+<!-- Step 4: Active -->
+<li class="flex items-center gap-2 shrink-0 bg-primary-fixed/50 px-3 py-1 rounded-full">
+<span class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm font-semibold shadow-xs">
+            4
+          </span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">4. Kết quả &amp; Hỏi đáp</span>
+</li>
+</ol>
+</div>
+</section>
+<!-- HEADER & TOOLBAR ROW -->
+<section class="w-full pb-4">
+<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-2">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-caption text-caption px-2 py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant font-semibold">Bước 4/4 · Hoàn tất xử lý</span>
+<span class="font-caption text-caption text-outline">Thời gian xử lý: 1.8s</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Kết quả phân tích &amp; Tư vấn y khoa</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Trợ lý lâm sàng AI hỗ trợ giải đáp thắc mắc xử trí và chăm sóc vết thương</p>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center gap-2 shrink-0">
+<button class="h-11 px-4 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-label-md flex items-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+<span>Xuất PDF</span>
+</button>
+<button class="h-11 px-4 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md flex items-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[20px]">share</span>
+<span>Chia sẻ ca bệnh</span>
+</button>
+</div>
+</div>
+<!-- Segmented Navigation (HIG macOS/iOS Style) -->
+<div class="mt-2 bg-surface-container-high/80 p-1 rounded-xl inline-flex flex-wrap max-w-full">
+<button class="px-4 py-2 rounded-lg font-label-sm text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">polyline</span>
+<span>Phân đoạn</span>
+</button>
+<button class="px-4 py-2 rounded-lg font-label-sm text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">layers</span>
+<span>Độ sâu</span>
+</button>
+<button class="px-4 py-2 rounded-lg font-label-sm text-on-surface-variant hover:text-on-surface transition-all flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">water_drop</span>
+<span>Cấp cứu &amp; Bù dịch</span>
+</button>
+<button class="px-4 py-2 rounded-lg font-label-sm bg-surface-container-lowest text-primary font-semibold shadow-xs flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px] text-primary" style="font-variation-settings: 'FILL' 1;">forum</span>
+<span>Hỏi đáp (AI)</span>
+</button>
+</div>
+</section>
+<!-- TWO COLUMNS: 70% / 30% GRID -->
+<section class="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pb-8">
+<!-- LEFT COLUMN: CHAT THREAD (70% ~ 8 of 12 cols on desktop) -->
+<div class="lg:col-span-8 flex flex-col bg-surface-container-lowest rounded-2xl shadow-sm p-4 sm:p-6 min-h-[680px] relative">
+<!-- Thread Header / Status Pill -->
+<div class="flex items-center justify-between pb-4 mb-2">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Hội chẩn tương tác thông minh</span>
+<span class="font-caption text-caption text-outline">LLM Triage Assistant</span>
+</div>
+<div class="font-caption text-caption text-outline">
+          Mã phiên: #TH-202410-0988
+        </div>
+</div>
+<!-- Scrollable Message Canvas -->
+<div class="flex flex-col gap-5 flex-1 overflow-y-auto pr-1 pb-4">
+<!-- Time Stamp Separator -->
+<div class="flex items-center justify-center my-1">
+<span class="font-caption text-caption text-outline bg-surface-container px-3 py-1 rounded-full">
+            Hôm nay, 14:32 · Trực tuyến
+          </span>
+</div>
+<!-- Medical Contextual Greeting Bubble -->
+<div class="flex gap-3 max-w-[90%]">
+<div class="w-9 h-9 rounded-full bg-primary-fixed text-primary flex items-center justify-center shrink-0 shadow-xs">
+<span class="material-symbols-outlined text-[20px]">medical_services</span>
+</div>
+<div class="bg-surface-container-low rounded-2xl rounded-tl-sm p-4 text-on-surface">
+<p class="font-body-sm text-body-sm leading-relaxed">
+              Trợ lý BurnScan đã nạp dữ liệu ca bệnh: <strong class="text-on-surface font-semibold">Bỏng nước độ 2, diện tích 45,8 cm² (4,5% TBSA)</strong>. Bạn có thể hỏi về xử trí ban đầu, chăm sóc vết thương hoặc tiêu chuẩn chuyển viện.
+            </p>
+<div class="mt-2.5 flex flex-wrap gap-2 pt-2">
+<span class="inline-flex items-center gap-1 font-caption text-caption px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-secondary">verified</span>
+                Phác đồ BYT 2023
+              </span>
+<span class="inline-flex items-center gap-1 font-caption text-caption px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-primary">analytics</span>
+                Đã nạp 5 thông số
+              </span>
+</div>
+</div>
+</div>
+<!-- User Message Turn (Right aligned, iOS blue #007AFF) -->
+<div class="flex flex-col items-end self-end max-w-[85%] sm:max-w-[75%]">
+<div class="bg-primary text-on-primary rounded-[18px] rounded-br-xs px-4 py-3 shadow-xs">
+<p class="font-body-md text-body-md leading-relaxed text-on-primary">
+              Vết bỏng này có nên chọc vỡ bọng nước không?
+            </p>
+</div>
+<span class="font-caption text-caption text-outline mt-1 mr-1">14:33 · Đã gửi</span>
+</div>
+<!-- Assistant Message Turn (Left aligned, card bubble) -->
+<div class="flex gap-3 max-w-[94%] self-start">
+<!-- Monogram BS Avatar -->
+<div class="w-9 h-9 rounded-full bg-primary-fixed text-primary flex items-center justify-center shrink-0 font-headline-md font-bold text-[14px] shadow-xs">
+            BS
+          </div>
+<div class="flex flex-col gap-2 flex-1">
+<!-- Bubble Content -->
+<div class="bg-surface-container-lowest rounded-[18px] rounded-tl-xs p-4 shadow-sm text-on-surface">
+<p class="font-body-md text-body-md leading-relaxed text-on-surface">
+                Không nên tự chọc vỡ bọng nước. Lớp biểu bì phồng rộp đóng vai trò như một lớp màng sinh học tự nhiên bảo vệ mô hạt bên dưới khỏi vi khuẩn xâm nhập. Bác sĩ nên giữ sạch và nhẹ nhàng che phủ bằng gạc vô trùng thấm nước muối sinh lý. Cần chuyển bệnh nhân đến cơ sở chuyên khoa bỏng nếu bọng nước quá căng, kích thước lớn hoặc có dấu hiệu đau tăng kèm rỉ dịch đục.
+              </p>
+</div>
+<!-- Source Chip + Verification -->
+<div class="flex flex-wrap items-center gap-2 px-1">
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-on-surface-variant text-caption font-caption">
+<span class="material-symbols-outlined text-[16px] text-primary">menu_book</span>
+<span>Hướng dẫn chẩn đoán và điều trị bỏng – Bộ Y tế (Quyết định 214/QĐ-BYT)</span>
+</div>
+<div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed text-caption font-caption font-medium">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Đã kiểm chứng phác đồ</span>
+</div>
+</div>
+<!-- Feedback Buttons Row -->
+<div class="flex items-center gap-1 px-1 mt-0.5">
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Hữu ích">
+<span class="material-symbols-outlined text-[18px]">thumb_up</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Không hữu ích">
+<span class="material-symbols-outlined text-[18px]">thumb_down</span>
+</button>
+<button class="w-8 h-8 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors" title="Sao chép nội dung">
+<span class="material-symbols-outlined text-[18px]">content_copy</span>
+</button>
+<span class="text-caption font-caption text-outline ml-2">Độ tin cậy: 98.4%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- FLOATING COMPOSER BAR (Apple HIG Style) -->
+<div class="mt-4 pt-3 bg-surface-container-low/80 backdrop-blur-md rounded-2xl p-3 shadow-md">
+<!-- Quick Reply Pills -->
+<div class="flex items-center gap-2 overflow-x-auto pb-2.5 mb-2 scrollbar-none">
+<span class="font-caption text-caption text-outline shrink-0 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">auto_awesome</span>
+            Gợi ý:
+          </span>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-caption text-caption shrink-0 transition-colors">
+            Nên bôi thuốc gì trong 24 giờ đầu?
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-caption text-caption shrink-0 transition-colors">
+            Người bỏng độ 2 nên kiêng gì?
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-caption text-caption shrink-0 transition-colors">
+            Khi nào cần đi viện?
+          </button>
+<button class="px-3 py-1.5 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-caption text-caption shrink-0 transition-colors">
+            Dấu hiệu nhiễm trùng mô hạt?
+          </button>
+</div>
+<!-- Input Box and Action Controls -->
+<div class="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-1.5 shadow-xs">
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Tải đính kèm ảnh phụ">
+<span class="material-symbols-outlined text-[20px]">add_photo_alternate</span>
+</button>
+<input class="flex-1 bg-transparent py-2 px-1 text-body-md font-body-md text-on-surface placeholder:text-outline focus:outline-none" placeholder="Hỏi về sơ cứu, chăm sóc vết thương…" type="text" value="Nên xử lý bọng nước nếu xuất hiện dịch đục như thế nào?"/>
+<button class="w-9 h-9 rounded-lg flex items-center justify-center text-outline hover:text-on-surface hover:bg-surface-container transition-colors" title="Nhập liệu bằng giọng nói">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+<!-- 44px Diameter Primary Blue Send Button -->
+<button class="w-11 h-11 rounded-full bg-primary hover:bg-primary-container text-on-primary flex items-center justify-center shadow-sm shrink-0 transition-all active:scale-95" title="Gửi tin nhắn">
+<span class="material-symbols-outlined text-[22px] font-bold">arrow_upward</span>
+</button>
+</div>
+<div class="flex items-center justify-between px-2 pt-2 text-caption font-caption text-outline">
+<span>Nhấn Enter để gửi · Shift + Enter để xuống dòng</span>
+<span>Bảo mật dữ liệu y tế HIPAA compliant</span>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: CLINICAL INSPECTOR (30% ~ 4 of 12 cols on desktop) -->
+<div class="lg:col-span-4 flex flex-col gap-4">
+<!-- Inset-grouped Clinical Card "Ca hiện tại" -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+<!-- Card Title -->
+<div class="flex items-center justify-between pb-3">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">assignment</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Ca hiện tại</h2>
+</div>
+<span class="font-caption text-caption px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-semibold">Đang theo dõi</span>
+</div>
+<!-- Thumbnail Row -->
+<div class="flex items-center gap-3.5 p-3 rounded-xl bg-surface-container-low mb-4">
+<img class="w-16 h-16 rounded-lg object-cover shrink-0 shadow-xs" data-alt="Close-up macro medical photograph of a partial thickness second-degree burn on a patient forearm showing intact blistered epidermis with erythematous pink wound margins under sterile emergency hospital lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdS19i2GaXLz1aEBEug554g1Ny5AbG2ssZXbs2LOaoOulmsfp_vq2i1hniyDe0e5e4_A23FK8EWMOv15BvYygNimClLsqwv2DF6Y2nRkIYYDOVMu9tmZpOQ5oQe6XLs8pjTM5PRNNQXRHqR4HT_y1F5Qxxc04rcFPPHEVkEw08dI2760a2O7CxgEaupS4ZIgcPBK8RdgxCdV0S2yIrNzYN8OxF9Xx_8bK2vhPM9lKt"/>
+<div class="flex flex-col min-w-0">
+<span class="font-label-md text-label-md text-on-surface font-semibold tracking-tight">Mã ca: #BS-2024-0988</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant truncate">Vị trí: Cẳng tay trái</span>
+<span class="font-caption text-caption text-outline">Bệnh nhân: Nam, 34 tuổi</span>
+</div>
+</div>
+<!-- Inset List Rows with Distinct Background Contrast -->
+<div class="flex flex-col gap-2">
+<!-- Row 1: Burn Degree -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Độ bỏng</span>
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm font-semibold">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+              Độ 2 (Trung bình)
+            </span>
+</div>
+<!-- Row 2: Burn Surface Area -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Diện tích</span>
+<span class="font-headline-md text-headline-md text-on-surface tabular-nums font-bold">45,8 cm²</span>
+</div>
+<!-- Row 3: % TBSA -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low">
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface-variant">% TBSA</span>
+<span class="font-caption text-caption text-outline">Quy tắc Wallace</span>
+</div>
+<span class="font-headline-md text-headline-md text-primary tabular-nums font-bold">4,5 %</span>
+</div>
+<!-- Row 4: Burn Elapsed Time -->
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Thời gian bỏng</span>
+<span class="font-label-md text-label-md text-on-surface font-medium">Đã bỏng 2 giờ</span>
+</div>
+<!-- Row 5: Parkland Formula Fluid -->
+<div class="flex flex-col gap-1.5 p-3 rounded-xl bg-surface-container-low">
+<div class="flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Dịch truyền Parkland</span>
+<span class="font-headline-md text-headline-md text-on-surface tabular-nums font-bold">4.800 ml / 24h</span>
+</div>
+<div class="flex items-center justify-between pt-1">
+<span class="font-caption text-caption text-outline">8 giờ đầu: 2.400 ml</span>
+<a class="font-caption text-caption text-primary hover:underline flex items-center gap-0.5" href="#">
+<span>Xem chi tiết phác đồ</span>
+<span class="material-symbols-outlined text-[12px]">open_in_new</span>
+</a>
+</div>
+</div>
+</div>
+<!-- Secondary Disclaimer Text -->
+<div class="mt-4 p-3 rounded-xl bg-surface-container text-on-surface-variant flex gap-2 items-start">
+<span class="material-symbols-outlined text-[16px] text-outline shrink-0 mt-0.5">info</span>
+<p class="font-caption text-caption leading-relaxed">
+            Câu trả lời chỉ mang tính tham khảo. Bác sĩ và nhân viên y tế cần kết hợp thăm khám lâm sàng trực tiếp để đưa ra quyết định điều trị.
+          </p>
+</div>
+</div>
+<!-- Action Card Below Inset Group -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm flex flex-col gap-3">
+<h3 class="font-label-md text-label-md text-on-surface font-semibold">Tác vụ chuyển tiếp</h3>
+<button class="w-full h-11 px-4 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary font-label-md flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[20px]">save</span>
+<span>Lưu phiên hỏi đáp vào bệnh án</span>
+</button>
+<div class="p-3 rounded-xl bg-surface-container-low flex items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-surface-container-high overflow-hidden shrink-0">
+<img class="w-full h-full object-cover" data-alt="Professional clinical portrait of an experienced Vietnamese senior burn specialist doctor wearing white medical coat and stethoscope in a well-lit hospital background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBnv59pjSdGro5TD77Ic3EI7nL3smubbN_RJSe4SKHWBPUGxn8w_rzjDFqhiwFV4j15EUYG3xrJtuMvLD5w3PEETmunFdga3_9c0M7BDwiwr2h2Dvsmr0zewqCSgX6TuKlcTIMYlE2h9ZI4AfqqoBbiUvcJRmXwrDVhQAmsrgzfT7dv0R3hks8KKtcFgCtVPqmU04l8AwX4rGY9r2ARNoCz-202E4IEreBj13uoj8Wg"/>
+</div>
+<div class="flex flex-col min-w-0">
+<span class="font-label-sm text-label-sm text-on-surface font-semibold truncate">BS. CKII. Nguyễn Văn Trực</span>
+<span class="font-caption text-caption text-outline truncate">Trưởng khoa Cấp cứu &amp; Bỏng</span>
+</div>
+</div>
+<button class="w-9 h-9 rounded-lg bg-surface-container-highest hover:bg-primary hover:text-on-primary flex items-center justify-center transition-colors text-on-surface" title="Gửi thông báo">
+<span class="material-symbols-outlined text-[18px]">forward_to_inbox</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+<!-- BOTTOM NAVIGATION DOCKED BAR -->
+<section class="w-full pt-2 pb-6">
+<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+<!-- Back Button -->
+<button class="w-full sm:w-auto h-11 px-5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[18px]">arrow_back_ios</span>
+<span>Quay lại cấp cứu</span>
+</button>
+<!-- Central Mini Status -->
+<div class="hidden md:flex items-center gap-2 font-caption text-caption text-outline">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>Dữ liệu lâm sàng đã được mã hóa theo phiên làm việc</span>
+</div>
+<!-- Primary Blue Finish Action CTA -->
+<button class="w-full sm:w-auto h-11 px-6 rounded-xl bg-primary hover:bg-primary-container text-on-primary font-label-md flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98">
+<span>Lưu hồ sơ &amp; Kết thúc ca khám</span>
+<span class="material-symbols-outlined text-[20px]">check</span>
+</button>
+</div>
+</section>
+</div></main>
+<!-- BOTTOM FROSTED GLASS BAR -->
+<footer class="fixed bottom-0 left-0 right-0 z-50 glass-bottom h-12">
+<div class="max-w-7xl mx-auto h-full px-margin flex items-center justify-between">
+<div class="font-caption text-caption text-on-surface-variant leading-none flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-outline">info</span>
+<span>Công cụ hỗ trợ tham khảo lâm sàng, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.</span>
+</div>
+<div class="font-caption text-caption text-outline tabular-nums">
+      ResNet50 / Grad-CAM+ | v2.4
+    </div>
+</div>
+</footer>
+</body></html>

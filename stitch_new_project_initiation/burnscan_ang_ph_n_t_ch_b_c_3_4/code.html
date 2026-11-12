@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - Tải ảnh vết bỏng</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    :root {
+      --app-bg: #F2F2F7;
+      --surface: #FFFFFF;
+      --text-primary: #000000;
+      --text-secondary: rgba(60, 60, 67, 0.60);
+      --text-tertiary: rgba(60, 60, 67, 0.30);
+      --separator: rgba(60, 60, 67, 0.29);
+      --control-fill: rgba(120, 120, 128, 0.12);
+      --accent: #007AFF;
+      --accent-tint: rgba(0, 122, 255, 0.12);
+      --grade-ok: #248A3D;
+      --grade-ok-tint: rgba(52, 199, 89, 0.12);
+      --grade-error: #D70015;
+      --grade-error-tint: rgba(255, 59, 48, 0.12);
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+      background-color: var(--app-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Apple Frosted Glass */
+    .glass-light {
+      background: rgba(249, 249, 249, 0.75);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 0.5px solid var(--separator);
+    }
+
+    .glass-bottom {
+      background: rgba(249, 249, 249, 0.78);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .dark-glass-toolbar {
+      background: rgba(28, 28, 30, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+    }
+
+    /* Apple segmented control */
+    .segmented-control {
+      background: rgba(120, 120, 128, 0.14);
+      border-radius: 8px;
+      padding: 2px;
+      display: inline-flex;
+    }
+
+    .segmented-btn {
+      padding: 4px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .segmented-btn.active {
+      background: #FFFFFF;
+      color: #000000;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 0.5px rgba(0, 0, 0, 0.04);
+      font-weight: 600;
+    }
+
+    /* Inset grouped list */
+    .inset-grouped {
+      background: #FFFFFF;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0.5px 1px rgba(0,0,0,0.04);
+    }
+
+    .inset-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .inset-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 52px;
+      right: 0;
+      height: 0.5px;
+      background: var(--separator);
+    }
+
+    .inset-item-dense:not(:last-child)::after {
+      left: 16px;
+    }
+
+    .dropzone-dashed {
+      border: 1.5px dashed #C7C7CC;
+      transition: all 0.2s ease;
+    }
+    .dropzone-dashed:hover {
+      border-color: #007AFF;
+      background-color: rgba(0, 122, 255, 0.02);
+    }
+  </style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/></head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900">
+<!-- TOP TOOLBAR (Apple macOS / iPadOS HIG Light Glass, 52px) -->
+<header class="sticky top-0 z-50 glass-light h-[52px] px-6 flex items-center justify-between">
+<!-- Left: Abstract Brand Logo + Wordmark -->
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-[8px] bg-[#007AFF] flex items-center justify-center text-white shadow-sm">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M12 2c0 4-5 6-5 10a5 5 0 0 0 10 0c0-4-5-6-5-10z"></path>
+<path d="M12 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="flex items-baseline gap-1.5">
+<span class="text-[17px] font-bold tracking-tight text-black">BurnScan</span>
+<span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-[#007AFF] border border-blue-200/50">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Control -->
+<div class="segmented-control">
+<button class="segmented-btn active" id="tab-patient">Bệnh nhân</button>
+<button class="segmented-btn" id="tab-doctor">Bác sĩ</button>
+</div>
+<!-- Right: Model Readiness & Status -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-[rgba(60,60,67,0.12)] shadow-xs">
+<span class="w-2 h-2 rounded-full bg-[#248A3D] animate-pulse"></span>
+<span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">Mô hình sẵn sàng</span>
+</div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT -->
+<main class="flex-1 w-full max-w-[840px] mx-auto px-6 py-8"><div class="flex flex-col w-full items-center justify-center">
+<!-- CLINICAL WORKFLOW STEPPER (macOS / iPadOS HIG segmented rail) -->
+<div class="w-full max-w-[560px] mb-8">
+<div class="flex items-center justify-between relative px-2">
+<!-- Background Connecting Line -->
+<div class="absolute left-6 right-6 top-3.5 h-[2px] bg-surface-container-highest z-0"></div>
+<div class="absolute left-6 top-3.5 h-[2px] bg-primary z-0 transition-all duration-500 w-[66%]"></div>
+<!-- Step 1: Completed -->
+<div class="flex flex-col items-center relative z-10 gap-1.5">
+<div class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[16px] leading-none">check</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant font-medium">Tải ảnh</span>
+</div>
+<!-- Step 2: Completed -->
+<div class="flex flex-col items-center relative z-10 gap-1.5">
+<div class="w-7 h-7 rounded-full bg-secondary text-on-secondary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[16px] leading-none">check</span>
+</div>
+<span class="font-caption text-caption text-on-surface-variant font-medium">Hiệu chuẩn</span>
+</div>
+<!-- Step 3: Current Active -->
+<div class="flex flex-col items-center relative z-10 gap-1.5">
+<div class="w-7 h-7 rounded-full bg-primary text-on-primary flex items-center justify-center shadow-sm ring-4 ring-primary-fixed">
+<span class="font-label-sm text-label-sm font-semibold tabular-nums">3</span>
+</div>
+<span class="font-caption text-caption text-primary font-semibold">Phân tích</span>
+</div>
+<!-- Step 4: Upcoming -->
+<div class="flex flex-col items-center relative z-10 gap-1.5">
+<div class="w-7 h-7 rounded-full bg-surface-container-highest text-outline flex items-center justify-center">
+<span class="font-label-sm text-label-sm tabular-nums">4</span>
+</div>
+<span class="font-caption text-caption text-outline">Kết quả</span>
+</div>
+</div>
+</div>
+<!-- MAIN ANALYSIS CARD (Apple HIG Inset Grouped Surface) -->
+<div class="w-full max-w-[560px] bg-surface-container-lowest rounded-2xl p-6 sm:p-7 shadow-sm transition-all duration-300">
+<!-- Top Header Row -->
+<div class="flex items-center gap-4 pb-6">
+<!-- Uploaded Forearm Thumbnail -->
+<div class="relative w-[72px] h-[72px] rounded-[10px] overflow-hidden bg-surface-container-high shrink-0 shadow-inner">
+<img class="w-full h-full object-cover" data-alt="Close-up clinical medical photo of a patient forearm superficial partial-thickness burn lesion, controlled hospital emergency room white lighting, clean sterile dermal evaluation shot." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTvEXAXWPnj1z6NrbA-_TF6PEEaSCxixm5VUUirM8emWbsrYDJeHJDjYVc6-Vfc5_r9bZFnZxwt6QhT6uIDc0oK0zD4yLwRFNZBBXOLdWxxYBJJMcK_aDf-IQ1R-JUaH7K3Kf3KlOL2eS43NRu4dCnX8jgIaEFscQHPbULeaBjCGDDKKMXqFVMqi20aOPf_PfQ6NvCmhteniQO07eQSlykEHxXSQsyk2mt63pjU3vE"/>
+<div class="absolute inset-0 bg-primary/5 pointer-events-none"></div>
+</div>
+<!-- Header Content -->
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-2 mb-1">
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight truncate">
+            Đang phân tích ảnh
+          </h1>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[15px] text-outline">schedule</span>
+<span>Thường mất khoảng 2 giây</span>
+</p>
+</div>
+</div>
+<!-- Inset-Grouped Task Pipeline List -->
+<div class="rounded-xl bg-surface-container-low overflow-hidden divide-y-0 mb-6">
+<!-- Task 1: Finished -->
+<div class="flex items-center justify-between h-12 px-4 bg-surface-container-lowest relative">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-[20px] text-secondary shrink-0" style="font-variation-settings: 'FILL' 1;">
+            check_circle
+          </span>
+<span class="font-body-md text-body-md text-on-surface truncate">
+            Lọc nhiễu và chuẩn hóa ảnh
+          </span>
+</div>
+<div class="flex items-center gap-1 shrink-0 ml-3">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Đã hoàn thành</span>
+</div>
+</div>
+<!-- Task 2: Active / Running (U-Net) -->
+<div class="flex items-center justify-between h-12 px-4 bg-surface-container-lowest relative">
+<div class="flex items-center gap-3 min-w-0">
+<!-- iOS System Activity Spinner -->
+<svg class="animate-spin h-5 w-5 text-primary shrink-0" fill="none" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
+<path class="opacity-90" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"></path>
+</svg>
+<span class="font-body-md text-body-md text-primary font-medium truncate">
+            U-Net đang phân đoạn vết thương
+          </span>
+</div>
+<div class="flex items-center gap-1.5 shrink-0 ml-3">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+<span class="font-body-sm text-body-sm text-primary font-medium">Đang xử lý...</span>
+</div>
+</div>
+<!-- Task 3: Waiting (ResNet-34) -->
+<div class="flex items-center justify-between h-12 px-4 bg-surface-container-lowest relative">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-[20px] text-outline shrink-0">
+            radio_button_unchecked
+          </span>
+<span class="font-body-md text-body-md text-on-surface-variant truncate">
+            ResNet-34 đang phân loại độ sâu
+          </span>
+</div>
+<div class="shrink-0 ml-3">
+<span class="font-body-sm text-body-sm text-outline">Chờ</span>
+</div>
+</div>
+<!-- Task 4: Waiting (Parkland) -->
+<div class="flex items-center justify-between h-12 px-4 bg-surface-container-lowest relative">
+<div class="flex items-center gap-3 min-w-0">
+<span class="material-symbols-outlined text-[20px] text-outline shrink-0">
+            radio_button_unchecked
+          </span>
+<span class="font-body-md text-body-md text-on-surface-variant truncate">
+            Tính lượng dịch Parkland
+          </span>
+</div>
+<div class="shrink-0 ml-3">
+<span class="font-body-sm text-body-sm text-outline">Chờ</span>
+</div>
+</div>
+</div>
+<!-- Progress Meter & Live Status Feedback -->
+<div class="space-y-2 mb-6">
+<div class="flex justify-between items-center text-caption font-caption text-on-surface-variant">
+<span>Tiến trình xử lý mô hình</span>
+<span class="font-label-sm text-label-sm font-semibold tabular-nums text-on-surface" id="progress-percentage">48%</span>
+</div>
+<!-- Thin Apple HIG Progress Track (4px) -->
+<div class="w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full transition-all duration-700 ease-out w-[48%]" id="active-progress-bar"></div>
+</div>
+</div>
+<!-- Clinical Action Row: Centered Secondary Tinted Dismiss CTA -->
+<div class="flex justify-center pt-2">
+<button class="h-11 px-8 rounded-[10px] bg-primary-fixed/50 hover:bg-primary-fixed text-primary font-label-md text-label-md active:scale-[0.98] transition-all flex items-center justify-center min-w-[120px]" onclick="confirmCancellation()" type="button">
+        Hủy
+      </button>
+</div>
+</div>
+<!-- Operational Diagnostics Note (Discreet HIG Footer) -->
+<div class="w-full max-w-[560px] mt-4 px-2 flex items-center justify-between text-caption font-caption text-outline">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[14px]">memory</span>
+<span>TensorRT Triage Node #02</span>
+</div>
+<div class="flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">lock</span>
+<span>Dữ liệu giải phẫu ẩn danh</span>
+</div>
+</div>
+</div>
+<script>
+  function confirmCancellation() {
+    if (confirm("Bạn có muốn hủy quá trình phân tích ảnh vết bỏng này không?")) {
+      window.location.reload();
+    }
+  }
+
+  // Micro-simulation of clinical inference pipeline advancement
+  setTimeout(() => {
+    const bar = document.getElementById('active-progress-bar');
+    const label = document.getElementById('progress-percentage');
+    if (bar && label) {
+      bar.style.width = '64%';
+      label.textContent = '64%';
+    }
+  }, 1200);
+</script></main>
+<!-- BOTTOM GLASS ACTION BAR (Fixed for Apple iPadOS/macOS HIG) -->
+<footer class="sticky bottom-0 z-50 glass-bottom px-6 py-3">
+<div class="max-w-[840px] mx-auto flex items-center justify-between">
+<!-- Footer disclaimer required by user spec -->
+<div class="text-[12px] text-[rgba(60,60,67,0.65)] leading-tight hidden md:block">
+        Công cụ hỗ trợ tham khảo, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.
+      </div>
+<!-- Action buttons -->
+<div class="flex items-center gap-3 ml-auto w-full md:w-auto justify-end">
+<!-- Secondary Tinted Button: "Chọn lại" -->
+<button class="h-10 px-5 rounded-[10px] bg-[rgba(0,122,255,0.12)] text-[#007AFF] font-medium text-[15px] hover:bg-[rgba(0,122,255,0.18)] active:scale-[0.98] transition-all flex items-center justify-center min-w-[100px]" onclick="switchView('frame1')">
+          Chọn lại
+        </button>
+<!-- Primary Solid Blue Button: "Tiếp tục" -->
+<button class="h-10 px-6 rounded-[10px] bg-[#007AFF] text-white font-medium text-[15px] hover:bg-[#006ee6] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xs min-w-[120px]" id="btn-continue" onclick="handleContinue()">
+<span>Tiếp tục</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<polyline points="9 18 15 12 9 6"></polyline>
+</svg>
+</button>
+</div>
+</div>
+</footer>
+<!-- JAVASCRIPT STATE CONTROLLER (Allows toggling Frame 1, Frame 2, Frame 3 seamlessly) -->
+<script>
+    function switchView(frameId) {
+      const uploadContainer = document.getElementById('upload-panel-container');
+      const previewContainer = document.getElementById('preview-panel-container');
+      const errorBanner = document.getElementById('error-banner');
+      const btnF1 = document.getElementById('btn-f1');
+      const btnF2 = document.getElementById('btn-f2');
+      const btnF3 = document.getElementById('btn-f3');
+      const btnContinue = document.getElementById('btn-continue');
+
+      // Reset button styles
+      [btnF1, btnF2, btnF3].forEach(b => {
+        b.className = "px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all";
+      });
+
+      if (frameId === 'frame1') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.add('hidden');
+        btnF1.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame2') {
+        uploadContainer.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+        errorBanner.classList.add('hidden');
+        btnF2.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.remove('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame3') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.remove('hidden');
+        btnF3.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function dismissError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function handleContinue() {
+      alert("Chuyển sang Bước 2: Thông tin lâm sàng bệnh nhân.");
+    }
+
+    // Interactive file input simulator
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        switchView('frame2');
+      }
+    });
+
+    // Default initialize on Frame 1 (Drop zone view)
+    switchView('frame1');
+  </script>
+</body></html>
