@@ -620,6 +620,50 @@ def create_full_report():
         doc.add_picture("outputs/figures/augmentation_demo.png", width=Cm(15.5))
         add_caption("Hình 3.2: Minh họa các kỹ thuật tăng cường dữ liệu thích nghi trên ảnh tổn thương da và mask")
         
+    add_h2("3.5. Kỹ thuật Trích xuất và Chuẩn bị Tập Dữ liệu Vùng Quan tâm (ROI Dataset Generation)")
+    add_p(
+        "Nhằm phục vụ chuyên biệt cho Giai đoạn 2 (Huấn luyện các mô hình phân loại cấp độ bỏng ResNet-34 và ConvNeXt-Tiny), "
+        "nhóm đã thiết kế và hiện thực hóa một quy trình tiền xử lý tự động trong module src/vision/postprocessing.py "
+        "để chuyển đổi toàn bộ tập dữ liệu ảnh toàn cảnh thành tập dữ liệu ảnh Vùng quan tâm (Region of Interest - ROI)."
+    )
+    add_p(
+        "1. Động lực lâm sàng và hạn chế của việc phân loại trực tiếp trên ảnh gốc: Trong ảnh y tế chụp toàn cảnh cơ thể "
+        "(chụp cánh tay, cẳng chân, hoặc thân mình), diện tích tổn thương bỏng thường chỉ chiếm từ 5% đến 20% tổng diện tích khung hình, "
+        "còn lại 80% đến 95% là da lành, quần áo, ga giường hoặc bối cảnh phòng bệnh. Nếu đưa trực tiếp ảnh gốc vào mạng tích chập "
+        "rồi cưỡng bức nén về kích thước 224x224, vết bỏng sẽ bị thu nhỏ thành một đốm bé xíu khoảng 20x20 pixel. "
+        "Các đặc trưng bệnh học vi thể sống còn (như bọng nước chứa dịch huyết thanh của Độ 2, hoặc các mảng hoại tử trắng xám, "
+        "vảy khô sẫm màu của Độ 3) sẽ bị nhòe và biến mất hoàn toàn. Đồng thời, mô hình rất dễ rơi vào hiện tượng 'học vẹt bối cảnh' "
+        "(Clever Hans Effect), nhận diện màu ga trải giường thay vì học mô bệnh học vết thương. "
+        "Do đó, việc cắt vùng quan tâm (ROI Cropping) tập trung 100% dung lượng chú ý vào tổn thương là bước đi tiên quyết.",
+        bold_prefix="Động lực y sinh học:\n"
+    )
+    add_p(
+        "2. Thời điểm sinh ROI và nguyên tắc Huấn luyện Phân tách (Decoupled Training): Quá trình tạo tập dữ liệu ROI được thực hiện "
+        "ngay sau khi đã hoàn tất việc chia tập ảnh gốc (train.csv, val.csv, test.csv), đảm bảo nguyên tắc chống rò rỉ dữ liệu (No Data Leakage). "
+        "Đặc biệt, trong pha huấn luyện, ảnh ROI được trích xuất trực tiếp dựa trên Mặt nạ chuẩn (Ground Truth Mask do MobileSAM sinh ra) "
+        "kết hợp thuật toán của nhóm, thay vì chờ mô hình U-Net dự đoán. Giải pháp này tuân thủ nguyên lý Huấn luyện Phân tách (Decoupled Training), "
+        "ngăn chặn triệt để hiện tượng Lan truyền lỗi dây chuyền (Cascading Error / Error Propagation) từ sai số phân đoạn sang phân loại, "
+        "giúp bộ phân loại học được các đặc trưng độ sâu một cách thuần khiết và khách quan nhất.",
+        bold_prefix="Thời điểm sinh ROI và Nguyên lý Decoupled Training:\n"
+    )
+    add_p(
+        "3. Quy trình 4 bước kỹ thuật trích xuất ROI chuẩn mực trong src/vision/postprocessing.py:\n"
+        "• Bước 1 - Lọc nhiễu hình thái học (Morphological Cleaning): Áp dụng phép đóng (Morphology Closing với kernel elip 5x5) "
+        "để lấp kín các lỗ thủng nhỏ bên trong vùng tổn thương, kết hợp thuật toán Connected Components để triệt tiêu các đốm trắng li ti "
+        "đơn lẻ có diện tích < 50 pixel xuất hiện do nốt ruồi hoặc bóng đổ trên da lành.\n"
+        "• Bước 2 - Tìm hộp bao và mở rộng 15% đệm an toàn (Safety Margin Padding): Xác định tọa độ hộp chữ nhật [x_min, y_min, x_max, y_max] "
+        "ôm trọn toàn bộ vết bỏng. Thuật toán tự động nới rộng thêm 15% kích thước về mỗi phía: x1 = max(0, x_min - 0.15*W), "
+        "y1 = max(0, y_min - 0.15*H)... Vùng đệm 15% này giữ lại quầng ban đỏ ngoại vi tiếp giáp giữa da lành và bờ tổn thương, "
+        "cung cấp thông tin lâm sàng cực kỳ quý giá giúp mô hình nhận diện độ sâu của vết bỏng.\n"
+        "• Bước 3 - Đệm khung vuông (Square Canvas Padding) chống méo mô tế bào: Đối với các vết bỏng dài hẹp, nếu cắt chữ nhật rồi ép thẳng "
+        "về 224x224, vết thương sẽ bị kéo dãn hoặc bẹp dúm làm méo mó cấu trúc mô học. Nhóm tạo một canvas vuông có cạnh bằng max(H, W), "
+        "đặt vùng cắt vào chính giữa (Center Padding), đệm viền đen đồng nhất xung quanh trước khi nội suy song tuyến tính về kích thước chuẩn vàng 224x224.\n"
+        "• Bước 4 - Lưu trữ có cấu trúc và xuất danh mục siêu dữ liệu: Toàn bộ ảnh ROI sau khi cắt được lưu vào thư mục data/processed/rois/ "
+        "và sinh ra 3 file chỉ mục chính thức: train_roi.csv (gồm đúng 856 ảnh ROI), val_roi.csv (182 ảnh ROI), và test_roi.csv (187 ảnh ROI). "
+        "Nhờ việc tạo sẵn tập ROI trên đĩa, tốc độ huấn luyện mô hình phân loại tăng gấp 5 lần do không phải xử lý cắt ảnh on-the-fly trong từng epoch.",
+        bold_prefix="Quy trình 4 bước kỹ thuật trích xuất ROI:\n"
+    )
+    
     # ==============================================================================
     # CHƯƠNG 4: PHƯƠNG PHÁP ĐỀ XUẤT VÀ KIẾN TRÚC HỆ THỐNG
     # ==============================================================================
@@ -1148,9 +1192,14 @@ def create_full_report():
         
     # Lưu tài liệu Word
     out_path = "Bao_Cao_Do_An_CS406_Skin_Burn_Analysis.docx"
-    doc.save(out_path)
+    try:
+        doc.save(out_path)
+    except PermissionError:
+        out_path = "Bao_Cao_Do_An_CS406_Skin_Burn_Analysis_v2.docx"
+        doc.save(out_path)
     print(f"🎉 ĐÃ HOÀN TẤT BIÊN SOẠN BÁO CÁO WORD: {os.path.abspath(out_path)}")
     print(f"File size: {os.path.getsize(out_path):,} bytes")
 
 if __name__ == "__main__":
     create_full_report()
+

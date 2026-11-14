@@ -149,3 +149,4 @@ if __name__ == "__main__":
     plot_seg_comparison()
     plot_cls_comparison()
     plot_pipeline_architecture()
+
