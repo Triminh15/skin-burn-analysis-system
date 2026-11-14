@@ -19,8 +19,12 @@
 
       <!-- Live Video Viewport -->
       <div class="p-4 bg-gray-950 flex items-center justify-center relative min-h-[320px]">
-        <video id="camera-video" autoplay playsinline class="w-full max-h-[380px] object-contain rounded-xl shadow-inner"></video>
-        <div class="absolute inset-6 border border-white/30 border-dashed rounded-xl pointer-events-none flex items-end justify-center pb-3">
+        <div id="camera-loading" class="absolute flex flex-col items-center gap-2 text-white/70">
+          <span class="material-symbols-outlined text-[32px] animate-spin">progress_activity</span>
+          <span class="text-[13px]">Đang kết nối camera...</span>
+        </div>
+        <video id="camera-video" autoplay playsinline muted class="w-full max-h-[380px] object-contain rounded-xl shadow-inner relative z-10"></video>
+        <div class="absolute inset-6 border border-white/30 border-dashed rounded-xl pointer-events-none flex items-end justify-center pb-3 z-20">
           <span class="text-white/80 text-[12px] bg-black/50 px-3 py-1 rounded-full backdrop-blur-xs">Căn chỉnh vết bỏng và thước đo vào giữa khung</span>
         </div>
       </div>

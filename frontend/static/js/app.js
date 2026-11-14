@@ -103,31 +103,64 @@ class AppWizard {
   static async triggerCamera() {
     const modal = document.getElementById('camera-modal');
     const video = document.getElementById('camera-video');
+    const loading = document.getElementById('camera-loading');
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showToast('Trình duyệt không hỗ trợ truy cập Camera trực tiếp.', 'warning');
+      showToast('Trình duyệt của bạn không hỗ trợ truy cập Webcam/Camera.', 'warning');
       return;
     }
+
+    if (modal) modal.classList.remove('hidden');
+    if (loading) loading.classList.remove('hidden');
 
     try {
       if (this.cameraStream) {
         this.cameraStream.getTracks().forEach(t => t.stop());
+        this.cameraStream = null;
       }
-      this.cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        audio: false
-      });
+
+      let stream = null;
+      // Thử ưu tiên camera sau (trên điện thoại) hoặc webcam thường (trên máy tính)
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      } catch (eConstrain) {
+        console.warn('Fallback sang cấu hình video mặc định:', eConstrain);
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+
+      this.cameraStream = stream;
+
       if (video) {
-        video.srcObject = this.cameraStream;
-        await video.play();
+        video.muted = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('muted', 'true');
+        video.srcObject = stream;
+
+        video.onloadedmetadata = () => {
+          if (loading) loading.classList.add('hidden');
+          video.play().catch(e => console.warn('Video play warning:', e));
+        };
       }
-      if (modal) modal.classList.remove('hidden');
     } catch (err) {
       console.error('Camera error:', err);
-      showToast('Không thể mở camera. Vui lòng cấp quyền truy cập camera trong trình duyệt.', 'warning');
+      if (modal) modal.classList.add('hidden');
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        showToast('Trình duyệt chưa được cấp quyền Camera. Hãy bấm vào biểu tượng Ổ khóa/Camera ở thanh địa chỉ để cấp quyền!', 'warning');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        showToast('Không tìm thấy thiết bị Webcam/Camera kết nối trên máy này.', 'warning');
+      } else {
+        showToast(`Không thể bật camera: ${err.message || err.name}`, 'warning');
+      }
     }
   }
 
