@@ -14,28 +14,17 @@
       </div>
     </div>
 
-    <!-- Center: Main Navigation Modes -->
-    <div class="segmented-control">
-      <button class="segmented-btn active" id="nav-btn-assessment" onclick="switchMainView('assessment')">
-        <span class="material-symbols-outlined text-[16px]">local_hospital</span>
-        <span>Đánh giá ca mới</span>
-      </button>
-      <button class="segmented-btn" id="nav-btn-history" onclick="toggleHistoryDrawer(true)">
-        <span class="material-symbols-outlined text-[16px]">folder_shared</span>
-        <span>Hồ sơ bệnh án</span>
-        <span id="history-badge-count" class="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-600 text-white font-bold ml-1">3</span>
-      </button>
-      <button class="segmented-btn" id="nav-btn-chat" onclick="openAssistantModal()">
-        <span class="material-symbols-outlined text-[16px]">chat_bubble</span>
-        <span>Trợ lý Y khoa RAG</span>
-      </button>
+    <!-- Center: Current Module Mode -->
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 border border-[rgba(60,60,67,0.12)] shadow-2xs">
+      <span class="material-symbols-outlined text-[16px] text-[#007AFF]">local_hospital</span>
+      <span class="text-[13px] font-medium text-gray-800">Đánh giá &amp; Phân tích ca mới</span>
     </div>
 
     <!-- Right: Model Readiness & Status -->
     <div class="flex items-center gap-3">
       <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 border border-[rgba(60,60,67,0.12)] shadow-xs">
         <span class="w-2.5 h-2.5 rounded-full bg-[#248A3D] animate-pulse"></span>
-        <span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">U-Net & ResNet-34 Sẵn sàng</span>
+        <span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">U-Net &amp; ResNet-34 Sẵn sàng</span>
       </div>
     </div>
   </header>
