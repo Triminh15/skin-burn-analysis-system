@@ -669,23 +669,31 @@ def create_full_report():
     # ==============================================================================
     add_h1("CHƯƠNG 4: PHƯƠNG PHÁP ĐỀ XUẤT VÀ KIẾN TRÚC HỆ THỐNG (PROPOSED METHODOLOGY)")
     
-    add_h2("4.1. Tổng quan Kiến trúc Hệ thống 2 Giai đoạn (Two-Stage Pipeline)")
+    add_h2("4.1. Tổng quan Kiến trúc Hệ thống và Chuỗi Pipeline Toàn diện (End-to-End Architecture)")
     add_p(
-        "Thay vì sử dụng một mô hình duy nhất cố gắng giải quyết đồng thời việc khoanh vùng và phân loại độ sâu, "
-        "hệ thống được thiết kế theo nguyên lý chia để trị (Divide and Conquer) với cấu trúc phân tầng khép kín gồm 4 phân hệ liên hoàn:"
+        "Theo yêu cầu của đề cương môn học CS406, một hệ thống thị giác máy tính chuẩn mực phải mô tả được toàn bộ chuỗi pipeline xử lý khép kín: "
+        "Input Image -> Preprocessing -> Model -> Postprocessing -> Output / Evaluation. "
+        "Thay vì sử dụng một mô hình duy nhất cố gắng giải quyết đồng thời mọi tác vụ, hệ thống được thiết kế theo nguyên lý chia để trị (Divide and Conquer) "
+        "với cấu trúc phân tầng liên hoàn gồm 5 phân hệ cốt lõi được minh họa tại Hình 4.1:"
     )
     
     if os.path.exists("outputs/figures/chart_pipeline_architecture.png"):
-        doc.add_picture("outputs/figures/chart_pipeline_architecture.png", width=Cm(16.0))
+        doc.add_picture("outputs/figures/chart_pipeline_architecture.png", width=Cm(16.5))
         add_caption("Hình 4.1: Sơ đồ kiến trúc tổng thể Hệ thống Phân tích Vết bỏng Đa phương thái (Skin Burn Analysis System)")
         
     add_p(
-        "• Giai đoạn 1 (Segmentation): Nhận ảnh màu tùy biến, sử dụng mạng U-Net ResNet-34 để sinh mặt nạ nhị phân và tính toán % TBSA.\n"
-        "• Phân hệ Hậu xử lý & Cắt ROI: Lọc hình thái học các đốm nhiễu, xác định hộp bao tổn thương, bổ sung 15% viền da an toàn "
-        "và đệm thành ảnh vuông (Square Padding) kích thước 224x224.\n"
-        "• Giai đoạn 2 (Classification): Nhận ảnh ROI 224x224, mạng ResNet-34 phân loại chính xác 3 cấp độ bỏng lâm sàng.\n"
-        "• Giai đoạn 3 (Explainability): Sinh bản đồ nhiệt Grad-CAM trực quan hóa vùng mô tổn thương mà mạng tập trung chú ý.\n"
-        "• Giai đoạn 4 (Clinical RAG): Tiếp nhận % TBSA và cấp độ bỏng, tự động truy xuất phác đồ Bộ Y tế và tính toán bù dịch Parkland."
+        "• Phân hệ 1 - Tiền xử lý ảnh đầu vào (Input Preprocessing Module): Tiếp nhận ảnh chụp thô từ điện thoại hoặc máy ảnh (kích thước bất kỳ). "
+        "Thực hiện chuyển đổi hệ màu BGR sang RGB chuẩn y sinh, chuẩn hóa kích thước không gian về 256x256 pixel và chuẩn hóa Z-score "
+        "theo kỳ vọng và độ lệch chuẩn của tập ImageNet (mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]), sau đó chuyển sang PyTorch Tensor (1, 3, 256, 256).\n"
+        "• Phân hệ 2 - Giai đoạn 1: Phân đoạn vết bỏng (Stage 1 Segmentation): Nạp tensor ảnh vào mạng U-Net (ResNet-34 backbone) đã tối ưu bằng "
+        "Focal Tversky Loss để trích xuất mặt nạ tổn thương chuẩn pixel (Binary Mask 0/1).\n"
+        "• Phân hệ 3 - Hậu xử lý & Trích xuất ROI thích nghi (Postprocessing & Adaptive ROI): Áp dụng thuật toán hình thái học (Morphological Closing) "
+        "để xóa nhiễu đốm nhỏ và lấp lỗ thủng; tự động tính toán tỷ lệ % diện tích tổn thương (% TBSA); xác định hộp bao tổn thương, "
+        "bổ sung 15% viền an toàn và đệm khung vuông (Square Canvas Padding) trước khi resize về kích thước chuẩn 224x224.\n"
+        "• Phân hệ 4 - Giai đoạn 2: Phân loại cấp độ bỏng (Stage 2 Classification): Nạp ảnh ROI 224x224 vào mạng ResNet-34 "
+        "để tính toán phân bố xác suất Softmax và đưa ra kết luận chính xác 1 trong 3 cấp độ bỏng lâm sàng (Độ 1, Độ 2, Độ 3).\n"
+        "• Phân hệ 5 - Minh bạch hóa AI & Hỗ trợ Y tế (XAI & Clinical RAG): Trích xuất bản đồ nhiệt Grad-CAM tại tầng layer4 để minh bạch hóa vùng chú ý lâm sàng; "
+        "đồng thời kết nối với cơ sở tri thức Quyết định số 4242/QĐ-BYT của Bộ Y tế để tự động tính toán thể tích dịch truyền bù sốc Parkland (V = 4 x m x % TBSA)."
     )
     
     add_h2("4.2. Giai đoạn 1: Mô hình Phân đoạn và Tối ưu hóa Hàm Mất mát Focal Tversky")
