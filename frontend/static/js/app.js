@@ -98,12 +98,74 @@ class AppWizard {
     });
   }
 
-  static triggerCamera() {
-    const fileInput = document.getElementById('file-input');
-    if (fileInput) {
-      fileInput.setAttribute('capture', 'environment');
-      fileInput.click();
+  static cameraStream = null;
+
+  static async triggerCamera() {
+    const modal = document.getElementById('camera-modal');
+    const video = document.getElementById('camera-video');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast('Trình duyệt không hỗ trợ truy cập Camera trực tiếp.', 'warning');
+      return;
     }
+
+    try {
+      if (this.cameraStream) {
+        this.cameraStream.getTracks().forEach(t => t.stop());
+      }
+      this.cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      });
+      if (video) {
+        video.srcObject = this.cameraStream;
+        await video.play();
+      }
+      if (modal) modal.classList.remove('hidden');
+    } catch (err) {
+      console.error('Camera error:', err);
+      showToast('Không thể mở camera. Vui lòng cấp quyền truy cập camera trong trình duyệt.', 'warning');
+    }
+  }
+
+  static closeCamera() {
+    const modal = document.getElementById('camera-modal');
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach(t => t.stop());
+      this.cameraStream = null;
+    }
+    const video = document.getElementById('camera-video');
+    if (video) video.srcObject = null;
+    if (modal) modal.classList.add('hidden');
+  }
+
+  static capturePhoto() {
+    const video = document.getElementById('camera-video');
+    if (!video || !this.cameraStream) {
+      showToast('Camera chưa sẵn sàng', 'warning');
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        showToast('Không thể chụp ảnh từ camera', 'warning');
+        return;
+      }
+      const filename = `camera_${Date.now()}.jpg`;
+      const file = new File([blob], filename, { type: 'image/jpeg' });
+      this.closeCamera();
+      this.handleFileSelected(file);
+      showToast('Đã chụp ảnh thành công!', 'check_circle');
+    }, 'image/jpeg', 0.95);
   }
 
   static handleFileSelected(file) {
@@ -313,6 +375,8 @@ window.addEventListener('DOMContentLoaded', () => {
 // Global UI bindings for modular HTML partials
 window.goToStep = (step) => AppWizard.goToStep(step);
 window.triggerCameraCapture = () => AppWizard.triggerCamera();
+window.closeCameraModal = () => AppWizard.closeCamera();
+window.captureCameraPhoto = () => AppWizard.capturePhoto();
 window.clearSelectedImage = () => AppWizard.clearSelectedImage();
 window.dismissError = () => AppWizard.dismissError();
 window.startAiAnalysis = () => AppWizard.startAiAnalysis();
