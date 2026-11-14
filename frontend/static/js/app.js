@@ -104,6 +104,10 @@ class AppWizard {
     const modal = document.getElementById('camera-modal');
     const video = document.getElementById('camera-video');
     const loading = document.getElementById('camera-loading');
+    const errorBox = document.getElementById('camera-error');
+    const errTitle = document.getElementById('camera-error-title');
+    const errDesc = document.getElementById('camera-error-desc');
+    const btnCapture = document.getElementById('btn-camera-capture');
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       showToast('Trình duyệt của bạn không hỗ trợ truy cập Webcam/Camera.', 'warning');
@@ -112,6 +116,8 @@ class AppWizard {
 
     if (modal) modal.classList.remove('hidden');
     if (loading) loading.classList.remove('hidden');
+    if (errorBox) errorBox.classList.add('hidden');
+    if (btnCapture) btnCapture.disabled = false;
 
     try {
       if (this.cameraStream) {
@@ -120,11 +126,9 @@ class AppWizard {
       }
 
       let stream = null;
-      // Thử ưu tiên camera sau (trên điện thoại) hoặc webcam thường (trên máy tính)
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
           },
@@ -153,13 +157,22 @@ class AppWizard {
       }
     } catch (err) {
       console.error('Camera error:', err);
-      if (modal) modal.classList.add('hidden');
+      if (loading) loading.classList.add('hidden');
+      if (errorBox) errorBox.classList.remove('hidden');
+      if (btnCapture) btnCapture.disabled = true;
+
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        showToast('Trình duyệt chưa được cấp quyền Camera. Hãy bấm vào biểu tượng Ổ khóa/Camera ở thanh địa chỉ để cấp quyền!', 'warning');
+        if (errTitle) errTitle.innerText = 'Trình duyệt chưa được cấp quyền Camera';
+        if (errDesc) errDesc.innerText = 'Vui lòng bấm vào biểu tượng bên trái thanh địa chỉ URL (icon ổ khóa / cài đặt trang web) và chọn Cho phép (Allow) Camera, sau đó bấm nút "Thử lại".';
+      } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+        if (errTitle) errTitle.innerText = 'Camera đang bị ứng dụng khác chiếm dụng';
+        if (errDesc) errDesc.innerText = 'Thiết bị camera đang được mở ở tab khác (như Google Meet trên trình duyệt của bạn) hoặc ứng dụng họp trực tuyến. Vui lòng tắt camera ở Google Meet rồi bấm "Thử lại".';
       } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        showToast('Không tìm thấy thiết bị Webcam/Camera kết nối trên máy này.', 'warning');
+        if (errTitle) errTitle.innerText = 'Không tìm thấy thiết bị Camera';
+        if (errDesc) errDesc.innerText = 'Trình duyệt không tìm thấy webcam nào đang kết nối. Bạn có thể bấm "Chọn file từ máy" để tải ảnh có sẵn.';
       } else {
-        showToast(`Không thể bật camera: ${err.message || err.name}`, 'warning');
+        if (errTitle) errTitle.innerText = 'Không thể khởi động camera';
+        if (errDesc) errDesc.innerText = `${err.message || err.name}. Bạn có thể bấm "Thử lại" hoặc tải ảnh trực tiếp từ máy tính.`;
       }
     }
   }
