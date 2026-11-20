@@ -30,11 +30,27 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 import json
+import numpy as np
 from config import SEGMENTATION_MODELS, CLASSIFICATION_MODELS, DEFAULT_SEG_MODEL, DEFAULT_CLS_MODEL
+
+def sanitize_json(data):
+    """Đảm bảo mọi kiểu dữ liệu numpy (np.bool_, np.float64, ...) được chuyển về kiểu native Python để FastAPI JSON encoder không bị crash"""
+    if isinstance(data, dict):
+        return {k: sanitize_json(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_json(v) for v in data]
+    elif isinstance(data, (np.bool_, bool)):
+        return bool(data)
+    elif isinstance(data, (np.integer, int)):
+        return int(data)
+    elif isinstance(data, (np.floating, float)):
+        return float(data)
+    elif isinstance(data, np.ndarray):
+        return sanitize_json(data.tolist())
+    return data
 from src.database.db import init_db, get_db, Patient, AnalysisSession
 from src.vision.burn_analyzer import BurnAnalyzer
 from src.utils.report_generator import generate_burn_report_pdf
-from src.rag.simple_advisor import ask_medical_bot
 
 app = FastAPI(title="BurnScan Clinical System API", version="2.0.0")
 
@@ -382,10 +398,13 @@ async def analyze_burn(
     clean_classification = {
         "predicted_degree": c.get("predicted_degree", "Độ 1"),
         "confidence": c.get("confidence", 0.0),
+        "is_abstaining": c.get("is_abstaining", False),
+        "ethical_status": c.get("ethical_status", "ACCEPT"),
+        "abstain_message": c.get("abstain_message", ""),
         "probabilities": c.get("probabilities", {}),
     }
 
-    return {
+    return sanitize_json({
         "status": "success",
         "session_id": session_id,
         "patient": {
@@ -405,16 +424,7 @@ async def analyze_burn(
             "gradcam": f"/uploads/{gradcam_filename}" if has_gradcam else None
         },
         "created_at": db_session.created_at.strftime("%d/%m/%Y %H:%M")
-    }
-
-class ChatQuery(BaseModel):
-    query: str
-    clinical_context: Optional[dict] = None
-
-@app.post("/api/chat")
-async def chat_endpoint(payload: ChatQuery):
-    reply = ask_medical_bot(payload.query, payload.clinical_context)
-    return {"reply": reply}
+    })
 
 @app.get("/api/sessions")
 async def get_history(q: Optional[str] = None, db: Session = Depends(get_db)):
@@ -437,7 +447,7 @@ async def get_history(q: Optional[str] = None, db: Session = Depends(get_db)):
             "body_part": s.body_part,
             "pct_frame_area": round(s.pct_frame_area, 1) if s.pct_frame_area else 0.0,
             "area_cm2": round(s.area_cm2, 1) if s.area_cm2 else None,
-            "estimated_tbsa_pct": round(s.estimated_tbsa_pct, 1) if s.estimated_tbsa_pct else 0.0,
+            "estimated_tbsa_pct": round(s.estimated_tbsa_pct, 3) if s.estimated_tbsa_pct else 0.0,
             "predicted_degree": s.predicted_degree,
             "confidence": round(s.confidence, 1) if s.confidence else 0.0,
             "urgent_triage": s.urgent_triage,
@@ -463,7 +473,7 @@ async def get_session_detail(session_id: str, db: Session = Depends(get_db)):
             "urgent_triage": bool(s.urgent_triage)
         }
 
-    return {
+    return sanitize_json({
         "status": "success",
         "session_id": s.session_uuid,
         "patient": {
@@ -481,7 +491,7 @@ async def get_session_detail(session_id: str, db: Session = Depends(get_db)):
             "body_part": s.body_part,
             "burn_time_hours": s.burn_time_hours or 1.0,
             "pixels_per_cm": s.pixels_per_cm,
-            "estimated_tbsa_pct": round(s.estimated_tbsa_pct, 1) if s.estimated_tbsa_pct else 0.0,
+            "estimated_tbsa_pct": round(s.estimated_tbsa_pct, 3) if s.estimated_tbsa_pct else 0.0,
             "parkland_plan": parkland
         },
         "classification": {
@@ -501,7 +511,7 @@ async def get_session_detail(session_id: str, db: Session = Depends(get_db)):
             "gradcam": s.gradcam_image_path
         },
         "created_at": s.created_at.strftime("%d/%m/%Y %H:%M")
-    }
+    })
 
 @app.delete("/api/sessions/{session_id}")
 async def delete_session(session_id: str, db: Session = Depends(get_db)):

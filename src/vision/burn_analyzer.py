@@ -161,7 +161,8 @@ class BurnAnalyzer:
         mask: np.ndarray,
         pixels_per_cm: Optional[float] = None,
         body_part: str = "chest_abdomen",
-        weight_kg: Optional[float] = None
+        weight_kg: Optional[float] = None,
+        predicted_class_id: int = 1
     ) -> Dict[str, Any]:
         """
         Tính toán toàn bộ thông số diện tích y khoa và phác đồ bù dịch.
@@ -171,6 +172,7 @@ class BurnAnalyzer:
         - pixels_per_cm: Hệ số quy đổi (số pixel tương ứng với 1 cm thực tế).
         - body_part: Vùng cơ thể theo Luật số 9 (head_neck, left_arm, chest_abdomen, etc.).
         - weight_kg: Cân nặng bệnh nhân (dùng tính công thức Parkland).
+        - predicted_class_id: Cấp độ bỏng dự đoán (0: Độ 1, 1: Độ 2, 2: Độ 3).
         """
         h, w = mask.shape[:2]
         total_pixels = h * w
@@ -185,36 +187,63 @@ class BurnAnalyzer:
             area_cm2 = round(burn_pixels / (pixels_per_cm ** 2), 2)
 
         # 3. Ước tính phần trăm tổng diện tích bề mặt cơ thể (% TBSA)
-        # Giả định: Vết bỏng chiếm pct_frame% diện tích bề mặt vùng giải phẫu được chỉ định
-        region_weight = RULE_OF_NINES.get(body_part, 9.0)
-        # Ước tính % TBSA = (pct_frame / 100) * region_weight
-        estimated_tbsa = round(min(region_weight, (pct_frame / 100.0) * region_weight), 2)
+        # Chuẩn y khoa: Nếu có thước chuẩn (area_cm2), tính chính xác theo diện tích cơ thể (BSA Mosteller)
+        # Nếu không có thước đo, mới ước lượng tương đối theo tỷ lệ diện tích khung ảnh (pct_frame)
+        region_weight = float(RULE_OF_NINES.get(body_part, 9.0))
+        if area_cm2 and area_cm2 > 0:
+            patient_weight = float(weight_kg if (weight_kg and weight_kg > 0) else 68.0)
+            # Công thức Mosteller tính diện tích bề mặt cơ thể BSA (m2 -> cm2, giả định chiều cao chuẩn 170cm)
+            bsa_cm2 = float(np.sqrt((170.0 * patient_weight) / 3600.0) * 10000.0)
+            tbsa_from_area = float((area_cm2 / bsa_cm2) * 100.0)
+            estimated_tbsa = float(round(min(region_weight, max(0.001, tbsa_from_area)), 3))
+        else:
+            # Fallback: Giả định tỷ lệ khung hình
+            estimated_tbsa = float(round(min(region_weight, (pct_frame / 100.0) * region_weight), 2))
 
-        # 4. Tính toán phác đồ bù dịch Parkland (nếu có cân nặng và TBSA > 0)
+        # 4. Tính toán phác đồ bù dịch Parkland (Chuẩn Bộ Y tế & Hiệp hội Bỏng Hoa Kỳ ABA)
+        # Chỉ định truyền dịch tĩnh mạch KHI VÀ CHỈ KHI:
+        # - Bỏng Độ 2 hoặc Độ 3 với diện tích TBSA >= 10-15% (có nguy cơ sốc bỏng)
+        # - TUYỆT ĐỐI KHÔNG TRUYỀN DỊCH TĨNH MẠCH KHI:
+        #   + Bỏng Độ 1 (Superficial): Không tổn thương mao mạch, không gây thất thoát thể tích tuần hoàn.
+        #   + Bỏng Độ 2 / Độ 3 diện tích nhỏ (< 10% TBSA): Không có nguy cơ sốc bỏng.
         parkland_plan = None
         if weight_kg and weight_kg > 0 and estimated_tbsa > 0:
-            total_fluid_ml = round(4.0 * weight_kg * estimated_tbsa, 1)
-            fluid_first_8h = round(total_fluid_ml * 0.5, 1)
-            rate_first_8h = round(fluid_first_8h / 8.0, 1)      # ml/h
-            rate_next_16h = round((total_fluid_ml * 0.5) / 16.0, 1)  # ml/h
+            total_fluid_ml = float(round(4.0 * float(weight_kg) * estimated_tbsa, 1))
+            fluid_first_8h = float(round(total_fluid_ml * 0.5, 1))
+            rate_first_8h = float(round(fluid_first_8h / 8.0, 1))      # ml/h
+            rate_next_16h = float(round((total_fluid_ml * 0.5) / 16.0, 1))  # ml/h
+
+            is_degree_1 = bool(predicted_class_id == 0)
+            is_indicated = bool((not is_degree_1) and (estimated_tbsa >= 10.0))
+            is_urgent = bool((not is_degree_1) and (estimated_tbsa >= 15.0))
+
+            if is_degree_1:
+                guidance = "Bỏng Độ 1 (thượng bì) không gây thất thoát huyết tương. Theo hướng dẫn của Bộ Y tế, KHÔNG áp dụng công thức Parkland và KHÔNG truyền dịch tĩnh mạch. Chỉ cần uống nước / Oresol bù điện giải."
+            elif not is_indicated:
+                guidance = f"Diện tích tổn thương nhỏ ({estimated_tbsa}% TBSA), không có nguy cơ sốc giảm thể tích. TUYỆT ĐỐI KHÔNG truyền dịch tĩnh mạch để tránh quá tải tuần hoàn. Bù nước đường uống (Oresol) và tập trung xử trí tại chỗ."
+            else:
+                guidance = f"Chỉ định cấp cứu: Diện tích tổn thương rộng ({estimated_tbsa}% TBSA), nguy cơ sốc bỏng cao. Bắt buộc truyền Ringer Lactate hồi sức theo phác đồ Parkland."
 
             parkland_plan = {
-                "total_fluid_24h_ml": total_fluid_ml,
-                "first_8h_ml": fluid_first_8h,
-                "rate_first_8h_ml_h": rate_first_8h,
-                "rate_next_16h_ml_h": rate_next_16h,
-                "fluid_type": "Dung dịch Ringer Lactate",
-                "urgent_triage": estimated_tbsa >= 15.0  # Chỉ định cấp cứu khẩn nếu TBSA >= 15%
+                "indicated": bool(is_indicated),
+                "total_fluid_24h_ml": float(total_fluid_ml) if is_indicated else 0.0,
+                "calculated_raw_ml": float(total_fluid_ml),
+                "first_8h_ml": float(fluid_first_8h) if is_indicated else 0.0,
+                "rate_first_8h_ml_h": float(rate_first_8h) if is_indicated else 0.0,
+                "rate_next_16h_ml_h": float(rate_next_16h) if is_indicated else 0.0,
+                "fluid_type": "Dung dịch Ringer Lactate" if is_indicated else "Bù dịch đường uống (Oresol / Nước ấm)",
+                "urgent_triage": bool(is_urgent),
+                "clinical_guidance": guidance
             }
 
         return {
             "image_dimensions": f"{w}x{h}",
-            "total_pixels": total_pixels,
-            "burn_pixels": burn_pixels,
-            "pct_frame_area": pct_frame,
-            "area_cm2": area_cm2,
+            "total_pixels": int(total_pixels),
+            "burn_pixels": int(burn_pixels),
+            "pct_frame_area": float(pct_frame),
+            "area_cm2": float(area_cm2) if area_cm2 is not None else None,
             "body_part": body_part,
-            "estimated_tbsa_pct": estimated_tbsa,
+            "estimated_tbsa_pct": float(estimated_tbsa),
             "parkland_plan": parkland_plan
         }
 
@@ -236,6 +265,8 @@ class BurnAnalyzer:
 
         pred_idx = int(np.argmax(probs))
         confidence = float(probs[pred_idx])
+        conf_pct = float(round(confidence * 100.0, 2))
+        is_abstaining = bool(conf_pct < 60.0)
 
         # Trích xuất Grad-CAM (hỗ trợ cả ResNet-34 và ConvNeXt-Tiny)
         gradcam_overlay = None
@@ -260,7 +291,14 @@ class BurnAnalyzer:
         return {
             "predicted_class_id": pred_idx,
             "predicted_degree": CLASS_NAMES[pred_idx],
-            "confidence": round(confidence * 100.0, 2),
+            "confidence": conf_pct,
+            "is_abstaining": is_abstaining,
+            "ethical_status": "ABSTAIN" if is_abstaining else "ACCEPT",
+            "abstain_message": (
+                f"Độ tin cậy của AI chỉ đạt {conf_pct}% (dưới ngưỡng an toàn 60.0%). "
+                "Theo nguyên tắc đạo đức y tế 'Không gây hại', AI TỪ CHỐI đưa ra phác đồ tự điều trị. Cần bác sĩ khám trực tiếp!"
+                if is_abstaining else "Độ tin cậy đạt chuẩn an toàn y tế."
+            ),
             "probabilities": {
                 "Độ 1 (Superficial)": round(float(probs[0]) * 100.0, 2),
                 "Độ 2 (Partial Thickness)": round(float(probs[1]) * 100.0, 2),
@@ -323,16 +361,17 @@ class BurnAnalyzer:
         # 1. Dự đoán Mask
         mask = self.predict_mask(image_rgb)
 
-        # 2. Tính diện tích và phác đồ
+        # 2. Phân loại mức độ bỏng trên ROI trước để xác định độ sâu
+        classification = self.classify_severity(image_rgb, mask)
+
+        # 3. Tính diện tích và phác đồ dựa trên độ sâu lâm sàng
         metrics = self.calculate_metrics(
             mask=mask,
             pixels_per_cm=pixels_per_cm,
             body_part=body_part,
-            weight_kg=weight_kg
+            weight_kg=weight_kg,
+            predicted_class_id=classification.get("predicted_class_id", 1)
         )
-
-        # 3. Phân loại mức độ bỏng trên ROI
-        classification = self.classify_severity(image_rgb, mask)
 
         # 4. Sinh ảnh trực quan hóa
         visuals = self.generate_visualizations(image_rgb, mask, classification["bounding_box"])

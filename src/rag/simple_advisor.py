@@ -4,7 +4,8 @@ Mục đích: Module Trợ lý Bác sĩ AI Y khoa (Clinical RAG Advisor) cung c�
 dựa trên Phác đồ Chẩn đoán và Điều trị Bỏng của Bộ Y tế Việt Nam.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from src.rag.guardrails import filter_dangerous_remedies, check_confidence_abstention
 
 # Tri thức y khoa tích hợp (Medical Knowledge Base - Cấp cứu Bỏng BHYT & Bộ Y Tế)
 MEDICAL_KB = {
@@ -42,6 +43,23 @@ MEDICAL_KB = {
 }
 
 def ask_medical_bot(query: str, clinical_context: Dict[str, Any] = None) -> str:
+    # 1. Chốt chặn bài thuốc dân gian độc hại
+    danger_warning = filter_dangerous_remedies(query)
+    if danger_warning:
+        return danger_warning
+
+    # 2. Chốt chặn Đạo đức y tế khi Độ tin cậy thấp (Abstention)
+    if clinical_context:
+        conf = clinical_context.get("confidence", 100.0)
+        abstain = check_confidence_abstention(conf)
+        if abstain["is_abstaining"]:
+            return (
+                f"⚠️ **TỪ CHỐI TƯ VẤN DO ĐỘ TIN CẬY THẤP ({conf:.1f}%):**\n"
+                f"- Theo nguyên tắc đạo đức y sinh 'Không gây hại', khi hình ảnh mờ hoặc độ tự tin của AI dưới 60%, "
+                f"hệ thống **không đưa ra chỉ định dùng thuốc hoặc phác đồ tự điều trị tại nhà** để tránh nguy cơ biến chứng.\n"
+                f"- **Khuyến cáo duy nhất:** Hãy giữ sạch vết thương và đến ngay cơ sở y tế gần nhất để bác sĩ thăm khám lâm sàng trực tiếp."
+            )
+
     q = query.lower()
     
     if any(k in q for k in ["bọng nước", "bóng nước", "phỏng nước", "chọc", "vỡ", "nặn"]):

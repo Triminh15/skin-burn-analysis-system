@@ -82,18 +82,28 @@ def generate_burn_report_pdf(output_pdf_path: str, data: dict, original_img_path
 
     parkland = metrics.get("parkland_plan")
     if parkland:
-        story.append(Paragraph("PHAC DO BU DICH CAP CUU PARKLAND (24 GIO)", h2_style))
-        parkland_data = [
-            ["Tong luong dich Ringer Lactate (24h):", f"{parkland.get('total_fluid_24h_ml', 0)} ml"],
-            ["Luong truyen trong 8 gio dau (50%):", f"{parkland.get('first_8h_ml', 0)} ml (Toc do: {parkland.get('rate_first_8h_ml_h', 0)} ml/h)"],
-            ["Luong truyen trong 16 gio tiep theo (50%):", f"{parkland.get('first_8h_ml', 0)} ml (Toc do: {parkland.get('rate_next_16h_ml_h', 0)} ml/h)"],
-            ["Canh bao cap cuu (Triage):", "CHUYEN TUYEN VIEN BONG KHAN CAP!" if parkland.get('urgent_triage') else "Dieu tri noi tru / Tiep tuc theo doi"]
-        ]
+        is_indicated = parkland.get("indicated", True)
+        story.append(Paragraph("DANH GIA BU DICH CAP CUU (PARKLAND)", h2_style))
+        if is_indicated:
+            parkland_data = [
+                ["Tong luong dich Ringer Lactate (24h):", f"{parkland.get('total_fluid_24h_ml', 0)} ml"],
+                ["Luong truyen trong 8 gio dau (50%):", f"{parkland.get('first_8h_ml', 0)} ml (Toc do: {parkland.get('rate_first_8h_ml_h', 0)} ml/h)"],
+                ["Luong truyen trong 16 gio tiep theo (50%):", f"{parkland.get('first_8h_ml', 0)} ml (Toc do: {parkland.get('rate_next_16h_ml_h', 0)} ml/h)"],
+                ["Canh bao cap cuu (Triage):", "CHUYEN TUYEN VIEN BONG KHAN CAP!" if parkland.get('urgent_triage') else "Dieu tri noi tru / Tiep tuc theo doi"]
+            ]
+        else:
+            is_deg3 = "3" in str(cls_data.get('predicted_degree', ''))
+            parkland_data = [
+                ["Chi dinh truyen dich tinh mach:", "KHONG CHI DINH (0 ml) - Bu dich duong uong"],
+                ["Danh gia nguy co soc mat dich:", "Khong co nguy co soc mat dich (TBSA < 10%)"],
+                ["Huong xu tri lam sang:", "Chuyen khoa Ngoai cat loc mo hoai tu (Debridement)" if is_deg3 else "Sat trung va cham soc vet thuong tai cho"],
+                ["Canh bao cap cuu (Triage):", "KHAM CHUYEN KHOA NGOAI BONG (CAT LOC)" if is_deg3 else "Theo doi & cham soc tai cho"]
+            ]
         t2 = Table(parkland_data, colWidths=[220, 300])
         t2.setStyle(TableStyle([
             ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f9f9fe')),
             ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#c1c6d7')),
-            ('TEXTCOLOR', (1,3), (1,3), colors.HexColor('#bb0011') if parkland.get('urgent_triage') else colors.HexColor('#006e28')),
+            ('TEXTCOLOR', (1,3), (1,3), colors.HexColor('#bb0011') if (parkland.get('urgent_triage') or (not is_indicated and is_deg3)) else colors.HexColor('#006e28')),
             ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
             ('BOTTOMPADDING', (0,0), (-1,-1), 5),
             ('TOPPADDING', (0,0), (-1,-1), 5),

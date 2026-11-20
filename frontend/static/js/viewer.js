@@ -72,6 +72,15 @@ class ResultsViewer {
     const imgs = data.images || {};
     const pk = m.parkland_plan || null;
 
+    // Hàm định dạng % TBSA chuẩn chữ số có nghĩa (tránh 0.03% bị làm tròn thành 0.0%)
+    const formatTBSA = (val) => {
+      const num = Number(val) || 0.0;
+      if (num === 0) return '0,0';
+      if (num < 0.01) return num.toFixed(3).replace('.', ',');
+      if (num < 1.0) return num.toFixed(2).replace('.', ',');
+      return num.toFixed(1).replace('.', ',');
+    };
+
     // 1. Tóm tắt bệnh nhân trên Header
     const nameEl = document.getElementById('res-patient-name');
     const metaEl = document.getElementById('res-patient-meta');
@@ -130,10 +139,25 @@ class ResultsViewer {
 
     // 3. Cảnh báo cấp cứu Triage
     const urgentBanner = document.getElementById('urgent-triage-banner');
-    const isUrgent = (pk && pk.urgent_triage) || (m.estimated_tbsa_pct >= 10.0) || deg.includes('Độ 3');
+    const urgentTitle = document.getElementById('urgent-triage-title');
+    const urgentDesc = document.getElementById('urgent-triage-desc');
+    const isDegree3 = deg.includes('Độ 3') || deg.includes('Full Thickness');
+    const isShockRisk = (m.estimated_tbsa_pct >= 10.0) || (pk && pk.urgent_triage);
+
     if (urgentBanner) {
-      if (isUrgent) urgentBanner.classList.remove('hidden');
-      else urgentBanner.classList.add('hidden');
+      if (isShockRisk) {
+        urgentBanner.className = 'rounded-2xl bg-red-50 border border-red-200 p-4 shadow-xs';
+        if (urgentTitle) urgentTitle.innerText = 'CẢNH BÁO TRIAGE: NGUY CƠ SỐC BỎNG & CHỈ ĐỊNH BÙ DỊCH KHẨN CẤP';
+        if (urgentDesc) urgentDesc.innerText = `Diện tích tổn thương đạt ${formatTBSA(m.estimated_tbsa_pct)}% TBSA. Cần thiết lập ngay 2 đường truyền tĩnh mạch lớn Ringer Lactate, đặt ống thông tiểu theo dõi và chuẩn bị chuyển viện chuyên khoa Bỏng.`;
+        urgentBanner.classList.remove('hidden');
+      } else if (isDegree3) {
+        urgentBanner.className = 'rounded-2xl bg-amber-50 border border-amber-300 p-4 shadow-xs';
+        if (urgentTitle) urgentTitle.innerText = 'CẢNH BÁO LÂM SÀNG: TỔN THƯƠNG HOẠI TỬ ĐỘ 3 (CẦN XỬ TRÍ NGOẠI KHOA)';
+        if (urgentDesc) urgentDesc.innerText = `Diện tích tổn thương nhỏ (${formatTBSA(m.estimated_tbsa_pct)}% TBSA) nên KHÔNG CẦN truyền dịch chống sốc. Tuy nhiên, vì là Bỏng Độ 3 (hoại tử mô sâu), bệnh nhân bắt buộc phải đến cơ sở y tế để bác sĩ cắt lọc mô chết (Debridement) và tiêm phòng uốn ván.`;
+        urgentBanner.classList.remove('hidden');
+      } else {
+        urgentBanner.classList.add('hidden');
+      }
     }
 
     // 4. Tab 1 - Phân đoạn ảnh & Thước đo định lượng
@@ -154,7 +178,7 @@ class ResultsViewer {
     if (burnPxEl) burnPxEl.innerText = `${(m.burn_pixels || 0).toLocaleString()} px`;
     if (frameRatioEl) frameRatioEl.innerText = `${(m.pct_frame_area || 0).toFixed(1).replace('.', ',')} %`;
     if (areaCm2El) areaCm2El.innerText = m.area_cm2 ? `${m.area_cm2.toFixed(1).replace('.', ',')} cm²` : '-- cm²';
-    if (tbsaPctEl) tbsaPctEl.innerText = `${(m.estimated_tbsa_pct || 0).toFixed(1).replace('.', ',')} %`;
+    if (tbsaPctEl) tbsaPctEl.innerText = `${formatTBSA(m.estimated_tbsa_pct)} %`;
 
     const regionInfo = BODY_PARTS[m.body_part] || { name: m.body_part, pct: 9.0 };
     const partNameEl = document.getElementById('metric-body-part-name');
@@ -167,10 +191,29 @@ class ResultsViewer {
 
     // 5. Tab 2 - Phân loại độ sâu & Xác suất Softmax
     const conf = c.confidence || 0.0;
+    const isAbstain = (conf < 60.0) || Boolean(c.is_abstaining);
     const confEl = document.getElementById('metric-confidence');
     const barConfEl = document.getElementById('bar-confidence');
-    if (confEl) confEl.innerText = `${conf.toFixed(1).replace('.', ',')} %`;
-    if (barConfEl) barConfEl.style.width = `${Math.min(100, conf)}%`;
+    if (confEl) {
+      confEl.innerText = `${conf.toFixed(1).replace('.', ',')} %`;
+      confEl.className = isAbstain ? 'font-bold text-red-600 tabular-nums' : 'font-bold text-orange-600 tabular-nums';
+    }
+    if (barConfEl) {
+      barConfEl.style.width = `${Math.min(100, conf)}%`;
+      barConfEl.className = isAbstain ? 'h-full bg-red-500 rounded-full' : 'h-full bg-orange-500 rounded-full';
+    }
+
+    // Toggle chốt chặn đạo đức y tế (Low Confidence Abstention)
+    const lowConfBox = document.getElementById('box-low-confidence-warning');
+    const tab5AbstainBanner = document.getElementById('tab5-abstention-banner');
+    if (lowConfBox) {
+      if (isAbstain) lowConfBox.classList.remove('hidden');
+      else lowConfBox.classList.add('hidden');
+    }
+    if (tab5AbstainBanner) {
+      if (isAbstain) tab5AbstainBanner.classList.remove('hidden');
+      else tab5AbstainBanner.classList.add('hidden');
+    }
 
     const probs = c.probabilities || {};
     const p1 = probs['Độ 1 (Superficial)'] || probs['Độ 1'] || 0.0;
@@ -206,29 +249,101 @@ class ResultsViewer {
     const subtextEl = document.getElementById('parkland-time-subtext');
     const elapsedPill = document.getElementById('parkland-elapsed-pill');
     const barElapsed = document.getElementById('bar-parkland-elapsed');
+    const statusHeading = document.getElementById('parkland-status-heading');
+    const fluidTypeLabel = document.getElementById('parkland-fluid-type-label');
+    const indicationAlert = document.getElementById('parkland-indication-alert');
+    const phaseContainer = document.getElementById('parkland-phase-container');
 
-    if (pk && pk.total_fluid_24h_ml) {
-      if (totalMlEl) totalMlEl.innerText = `${Math.round(pk.total_fluid_24h_ml).toLocaleString()} ml`;
-      if (ml8hEl) ml8hEl.innerText = `${Math.round(pk.first_8h_ml).toLocaleString()} ml`;
-      if (rate8hEl) rate8hEl.innerText = `${(pk.rate_first_8h_ml_h || (pk.first_8h_ml / 8)).toFixed(1)} ml/h (~${Math.round((pk.rate_first_8h_ml_h || 100) / 3)} gtt/p)`;
+    const tbsa = m.estimated_tbsa_pct || 0.0;
+    const isIndicated = (pk && typeof pk.indicated === 'boolean') ? pk.indicated : (tbsa >= 10.0);
+    const calculatedMl = (pk && pk.calculated_raw_ml) || (4.0 * (p.weight_kg || 68.0) * tbsa);
 
-      const next16h = pk.total_fluid_24h_ml - pk.first_8h_ml;
-      if (ml16hEl) ml16hEl.innerText = `${Math.round(next16h).toLocaleString()} ml`;
-      if (rate16hEl) rate16hEl.innerText = `${(pk.rate_next_16h_ml_h || (next16h / 16)).toFixed(1)} ml/h (~${Math.round((pk.rate_next_16h_ml_h || 50) / 3)} gtt/p)`;
-
-      const burnTime = m.burn_time_hours || 2.0;
-      const rem8h = Math.max(0.5, 8.0 - burnTime);
-      if (subtextEl) subtextEl.innerText = `Đã tiêu tốn ${burnTime}h từ khi bỏng · Còn lại ${rem8h.toFixed(1)}h để truyền hết 50% giai đoạn 1`;
-      if (elapsedPill) elapsedPill.innerText = `Đã qua: ${burnTime}h`;
-
-      const elapsedPct = Math.min(100, (burnTime / 8.0) * 100);
-      if (barElapsed) barElapsed.style.width = `${elapsedPct}%`;
-    } else {
-      const estTotal = 4.0 * (p.weight_kg || 68.0) * (m.estimated_tbsa_pct || 4.6);
-      if (totalMlEl) totalMlEl.innerText = `${Math.round(estTotal).toLocaleString()} ml`;
-      if (ml8hEl) ml8hEl.innerText = `${Math.round(estTotal / 2).toLocaleString()} ml`;
-      if (ml16hEl) ml16hEl.innerText = `${Math.round(estTotal / 2).toLocaleString()} ml`;
+    if (indicationAlert) {
+      indicationAlert.classList.remove('hidden');
+      if (!isIndicated) {
+        if (isDegree3) {
+          indicationAlert.className = 'p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col gap-1.5';
+          indicationAlert.innerHTML = `
+            <div class="flex items-center gap-2 font-bold text-amber-900 text-[14px]">
+              <span class="material-symbols-outlined text-[20px] text-amber-600">warning</span>
+              <span>BỎNG ĐỘ 3 DIỆN TÍCH NHỎ (${formatTBSA(tbsa)}% TBSA) — KHÔNG CÓ NGUY CƠ SỐC BỎNG</span>
+            </div>
+            <p class="text-[13px] text-amber-900/90 leading-relaxed">
+              • <strong>Không truyền dịch tĩnh mạch:</strong> Diện tích vết bỏng nhỏ (${formatTBSA(tbsa)}% TBSA) không làm thất thoát thể tích tuần hoàn. Tuyệt đối KHÔNG truyền dịch tĩnh mạch để tránh phù phổi cấp và suy tim.<br>
+              • <strong>Chỉ định bắt buộc:</strong> Bù nước đường uống (Oresol) theo nhu cầu. Bắt buộc đến cơ sở y tế để bác sĩ ngoại khoa Bỏng <strong>CẮT LỌC MÔ HOẠI TỬ (Debridement)</strong> và tiêm phòng uốn ván.
+            </p>
+          `;
+        } else {
+          indicationAlert.className = 'p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex flex-col gap-1.5';
+          indicationAlert.innerHTML = `
+            <div class="flex items-center gap-2 font-bold text-emerald-900 text-[14px]">
+              <span class="material-symbols-outlined text-[20px] text-emerald-600">check_circle</span>
+              <span>DIỆN TÍCH TỔN THƯƠNG NHỎ (${formatTBSA(tbsa)}% TBSA) — KHÔNG CẦN TRUYỀN DỊCH TĨNH MẠCH</span>
+            </div>
+            <p class="text-[13px] text-emerald-900/90 leading-relaxed">
+              Vết bỏng chiếm ${formatTBSA(tbsa)}% TBSA, cơ thể không bị sốc mất nước. Bệnh nhân chỉ cần bù nước qua đường uống (Oresol, nước ấm) và tiến hành chăm sóc sát trùng, băng gạc tại chỗ theo hướng dẫn ở <strong>Tab 5</strong>.
+            </p>
+          `;
+        }
+      } else {
+        indicationAlert.className = 'p-4 rounded-xl bg-red-50 border border-red-300 text-red-950 flex flex-col gap-1.5';
+        indicationAlert.innerHTML = `
+          <div class="flex items-center gap-2 font-bold text-red-900 text-[14px]">
+            <span class="material-symbols-outlined text-[20px] text-red-600">emergency</span>
+            <span>CHỈ ĐỊNH CẤP CỨU TRUYỀN DỊCH HỒI SỨC THEO PHÁC ĐỒ PARKLAND</span>
+          </div>
+          <p class="text-[13px] text-red-900/90 leading-relaxed">
+            Diện tích tổn thương rộng (${formatTBSA(tbsa)}% TBSA), nguy cơ sốc giảm thể tích cao. Bắt buộc truyền 50% tổng lượng dịch trong 8 giờ đầu tính từ lúc bị bỏng.
+          </p>
+        `;
+      }
     }
+
+    if (statusHeading) {
+      statusHeading.innerText = isIndicated ? 'Tổng lượng dịch truyền trong 24 giờ đầu' : 'Tình trạng: Không có chỉ định truyền dịch tĩnh mạch';
+    }
+    if (fluidTypeLabel) {
+      fluidTypeLabel.innerText = isIndicated ? 'Dung dịch Ringer Lactate' : 'Bù nước đường uống (Oresol)';
+    }
+
+    if (totalMlEl) {
+      if (isIndicated) {
+        totalMlEl.className = 'text-[28px] font-extrabold text-[#007AFF] tabular-nums block';
+        totalMlEl.innerText = `${Math.round(calculatedMl).toLocaleString()} ml`;
+      } else {
+        totalMlEl.className = 'text-[22px] font-extrabold text-emerald-600 tabular-nums block';
+        totalMlEl.innerText = '0 ml (Uống Oresol)';
+      }
+    }
+
+    if (phaseContainer) {
+      if (!isIndicated) {
+        phaseContainer.classList.add('opacity-40');
+      } else {
+        phaseContainer.classList.remove('opacity-40');
+      }
+    }
+
+    const first8h = isIndicated ? ((pk && pk.first_8h_ml) || (calculatedMl * 0.5)) : 0;
+    const rate8h = isIndicated ? ((pk && pk.rate_first_8h_ml_h) || (first8h / 8.0)) : 0;
+    const next16h = isIndicated ? (calculatedMl - first8h) : 0;
+    const rate16h = isIndicated ? ((pk && pk.rate_next_16h_ml_h) || (next16h / 16.0)) : 0;
+
+    if (ml8hEl) ml8hEl.innerText = isIndicated ? `${Math.round(first8h).toLocaleString()} ml` : '0 ml';
+    if (rate8hEl) rate8hEl.innerText = isIndicated ? `${rate8h.toFixed(1)} ml/h (~${Math.round(rate8h / 3)} gtt/p)` : 'Không truyền tĩnh mạch';
+    if (ml16hEl) ml16hEl.innerText = isIndicated ? `${Math.round(next16h).toLocaleString()} ml` : '0 ml';
+    if (rate16hEl) rate16hEl.innerText = isIndicated ? `${rate16h.toFixed(1)} ml/h (~${Math.round(rate16h / 3)} gtt/p)` : 'Không truyền tĩnh mạch';
+
+    const burnTime = m.burn_time_hours || 2.0;
+    const rem8h = Math.max(0.5, 8.0 - burnTime);
+    if (subtextEl) {
+      subtextEl.innerText = isIndicated ?
+        `Đã tiêu tốn ${burnTime}h từ khi bỏng · Còn lại ${rem8h.toFixed(1)}h để truyền hết 50% giai đoạn 1` :
+        `Tổn thương diện tích nhỏ, không cần chia lộ trình truyền dịch tĩnh mạch.`;
+    }
+    if (elapsedPill) elapsedPill.innerText = `Đã qua: ${burnTime}h`;
+    const elapsedPct = Math.min(100, (burnTime / 8.0) * 100);
+    if (barElapsed) barElapsed.style.width = isIndicated ? `${elapsedPct}%` : '0%';
 
     // Mặc định chuyển về Tab 1
     this.switchResultTab('segmentation');

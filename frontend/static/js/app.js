@@ -8,14 +8,6 @@ class AppWizard {
     this.setupDropzone();
     CaliperManager.init();
     HistoryManager.init();
-
-    // Event listener cho phím Enter trong ô chat
-    const chatInput = document.getElementById('chat-user-input');
-    if (chatInput) {
-      chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') ChatAssistant.send();
-      });
-    }
   }
 
   /**
@@ -446,9 +438,4 @@ window.toggleHistoryDrawer = (show) => HistoryManager.toggleDrawer(show);
 window.debounceHistorySearch = (q) => HistoryManager.onSearchInput(q);
 window.loadPastSession = (id) => HistoryManager.loadPastSession(id);
 window.deleteSessionRecord = (id) => HistoryManager.deleteSession(id);
-
-window.openAssistantModal = () => ChatAssistant.openModal();
-window.closeAssistantModal = () => ChatAssistant.closeModal();
-window.sendQuickChat = (text) => ChatAssistant.sendQuick(text);
-window.sendChatMessage = () => ChatAssistant.send();
 

@@ -35,9 +35,9 @@
             <span class="material-symbols-outlined text-[24px]">emergency</span>
           </div>
           <div class="flex-1">
-            <h4 class="text-[15px] font-bold text-red-900">CẢNH BÁO TRIAGE: NGUY CƠ SỐC BỎNG & CẦN BÙ DỊCH KHẨN CẤP</h4>
-            <p class="text-[13px] text-red-800/90 mt-0.5">
-              Diện tích tổn thương TBSA &gt; 10-15% hoặc tổn thương Độ 3 toàn phần. Cần thiết lập ngay 2 đường truyền tĩnh mạch lớn, đặt ống thông tiểu theo dõi lưu lượng nước tiểu và chuẩn bị chuyển viện chuyên khoa Bỏng.
+            <h4 id="urgent-triage-title" class="text-[15px] font-bold text-red-900">CẢNH BÁO TRIAGE LÂM SÀNG</h4>
+            <p id="urgent-triage-desc" class="text-[13px] text-red-800/90 mt-0.5">
+              Cần đánh giá kỹ lưỡng để có hướng can thiệp y tế phù hợp.
             </p>
           </div>
         </div>
@@ -233,6 +233,15 @@
               </div>
             </div>
 
+            <!-- Low Confidence / Ethical Abstention Warning Box -->
+            <div id="box-low-confidence-warning" class="hidden p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[13px] leading-relaxed">
+              <div class="flex items-center gap-2 font-bold text-amber-900 mb-1">
+                <span class="material-symbols-outlined text-[18px] text-amber-600">health_and_safety</span>
+                <span>CHỐT CHẶN ĐẠO ĐỨC Y HỌC (AI ABSTENTION)</span>
+              </div>
+              <p id="text-low-confidence-msg">Độ tin cậy của mô hình dưới ngưỡng an toàn (60%). Hệ thống từ chối khẳng định chẩn đoán để bảo đảm an toàn tính mạng cho người bệnh.</p>
+            </div>
+
             <!-- 3-Class Probability Distribution -->
             <div class="flex flex-col gap-3 pt-2">
               <span class="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">Phân bố xác suất 3 cấp độ bỏng</span>
@@ -424,16 +433,21 @@
             <div class="flex items-center justify-between border-b pb-4 border-gray-100">
               <div>
                 <span class="text-[12px] font-semibold text-gray-500 uppercase tracking-wider block">Phác đồ bù dịch Parkland (Ringer Lactate)</span>
-                <h3 class="text-[20px] font-bold text-gray-900 mt-0.5">Tổng lượng dịch truyền trong 24 giờ đầu</h3>
+                <h3 class="text-[20px] font-bold text-gray-900 mt-0.5" id="parkland-status-heading">Tổng lượng dịch truyền trong 24 giờ đầu</h3>
               </div>
               <div class="text-right">
                 <span id="parkland-total-ml" class="text-[28px] font-extrabold text-[#007AFF] tabular-nums block">1.243 ml</span>
-                <span class="text-[12px] text-gray-500 font-medium">Dung dịch Ringer Lactate</span>
+                <span id="parkland-fluid-type-label" class="text-[12px] text-gray-500 font-medium">Dung dịch Ringer Lactate</span>
               </div>
             </div>
 
+            <!-- Clinical Indication Notice Box -->
+            <div id="parkland-indication-alert" class="p-3.5 rounded-xl border text-[13px] leading-relaxed hidden">
+              <!-- Dynamically populated by viewer.js -->
+            </div>
+
             <!-- Inset Phase Division -->
-            <div class="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-200/60 border border-gray-200/60">
+            <div id="parkland-phase-container" class="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-200/60 border border-gray-200/60">
               <!-- Phase 1: 8 hours -->
               <div class="p-4 bg-white flex items-center justify-between">
                 <div>
@@ -554,6 +568,19 @@
       <div id="res-tab-recovery" class="res-tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         <div class="lg:col-span-8 flex flex-col gap-4">
+          <!-- Ethical Abstention Warning Banner on Tab 5 -->
+          <div id="tab5-abstention-banner" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 shadow-xs">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-amber-600 text-[26px] shrink-0 mt-0.5">health_and_safety</span>
+              <div>
+                <h4 class="font-bold text-amber-900 text-[15px]">KHUYẾN CÁO ĐẠO ĐỨC Y KHOA: KHÔNG TỰ ĐIỀU TRỊ TẠI NHÀ</h4>
+                <p class="text-[13px] text-amber-900/90 mt-1 leading-relaxed">
+                  Độ tin cậy của AI dưới 60% (chất lượng ảnh chụp mờ hoặc tổn thương ở ranh giới phức tạp). Để tránh dùng sai thuốc gây nhiễm trùng hoặc hoại tử sâu, người bệnh <strong>tuyệt đối không tự điều trị theo mẹo dân gian</strong> mà cần đến cơ sở y tế gần nhất để bác sĩ chuyên khoa thăm khám trực tiếp.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div class="inset-grouped p-6 flex flex-col gap-4">
             <h3 class="text-[18px] font-bold text-gray-900 border-b pb-3 border-gray-100 flex items-center gap-2">
               <span class="material-symbols-outlined text-emerald-600 text-[22px]">healing</span>

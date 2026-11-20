@@ -72,23 +72,5 @@ class ApiService {
     }
     return await response.json();
   }
-
-  /**
-   * Gửi câu hỏi lâm sàng tới Trợ lý Y khoa RAG
-   */
-  static async sendChatMessage(query, clinicalContext = null) {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: query,
-        clinical_context: clinicalContext
-      })
-    });
-    if (!response.ok) {
-      throw new Error('Không thể kết nối tới Trợ lý Y khoa');
-    }
-    return await response.json();
-  }
 }
 
