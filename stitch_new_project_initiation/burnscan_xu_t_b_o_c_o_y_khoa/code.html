@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - ER Triage</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container-lowest": "#ffffff",
+          "surface-container-high": "#e8e8ed",
+          "on-tertiary-fixed-variant": "#93000a",
+          "surface-bright": "#f9f9fe",
+          "tertiary": "#bb0011",
+          "on-primary-fixed-variant": "#004493",
+          "secondary": "#006e28",
+          "surface-dim": "#d9dade",
+          "background": "#f9f9fe",
+          "on-primary-container": "#fefcff",
+          "secondary-fixed": "#95f99d",
+          "outline-variant": "#c1c6d7",
+          "surface-container": "#ededf2",
+          "on-primary-fixed": "#001a41",
+          "secondary-fixed-dim": "#79dc84",
+          "primary-container": "#0070eb",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed": "#002107",
+          "secondary-container": "#95f99d",
+          "outline": "#717786",
+          "on-tertiary-container": "#fffbff",
+          "surface-variant": "#e2e2e7",
+          "primary-fixed-dim": "#adc6ff",
+          "error-container": "#ffdad6",
+          "on-secondary": "#ffffff",
+          "tertiary-fixed": "#ffdad6",
+          "surface": "#f9f9fe",
+          "surface-tint": "#005bc1",
+          "on-surface-variant": "#414755",
+          "primary": "#0058bc",
+          "inverse-primary": "#adc6ff",
+          "inverse-surface": "#2e3034",
+          "on-error": "#ffffff",
+          "error": "#ba1a1a",
+          "inverse-on-surface": "#f0f0f5",
+          "surface-container-highest": "#e2e2e7",
+          "on-tertiary-fixed": "#410002",
+          "tertiary-container": "#e6171e",
+          "primary-fixed": "#d8e2ff",
+          "on-primary": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "on-secondary-fixed-variant": "#00531d",
+          "on-surface": "#1a1c1f",
+          "on-secondary-container": "#00752b",
+          "on-background": "#1a1c1f",
+          "surface-container-low": "#f3f3f8",
+          "tertiary-fixed-dim": "#ffb4ab"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-xl": "1.5rem",
+          "margin": "1.5rem",
+          "space-lg": "1rem",
+          "space-xs": "0.25rem",
+          "gutter": "1rem",
+          "space-md": "0.75rem"
+        },
+        "fontFamily": {
+          "headline-md": ["Inter"],
+          "headline-xl": ["Inter"],
+          "body-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "caption": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"]
+        },
+        "fontSize": {
+          "headline-md": ["17px", {"lineHeight": "22px", "fontWeight": "600"}],
+          "headline-xl": ["32px", {"lineHeight": "38px", "fontWeight": "700"}],
+          "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+          "body-lg": ["17px", {"lineHeight": "22px", "fontWeight": "400"}],
+          "headline-lg": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+          "label-sm": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+          "caption": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+          "label-md": ["15px", {"lineHeight": "20px", "fontWeight": "600"}]
+        }
+      },
+    },
+  }
+</script>
+<style>
+  @layer base {
+    html {
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+  .glass-light {
+    background: rgba(249, 249, 249, 0.75);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .glass-bottom {
+    background: rgba(249, 249, 249, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .segmented-control {
+    background: rgba(120, 120, 128, 0.14);
+    border-radius: 8px;
+    padding: 2px;
+    display: inline-flex;
+  }
+</style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+</head>
+<body class="bg-background text-on-background min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TOP FROSTED GLASS BAR (Exact height: h-14 / 56px) -->
+<header class="fixed top-0 left-0 right-0 z-50 glass-light">
+<div class="h-14 px-margin flex items-center justify-between max-w-7xl mx-auto">
+<!-- Brand & Clinical Badge -->
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[20px]">local_fire_department</span>
+</div>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-md text-headline-md tracking-tight text-on-surface">BurnScan</span>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Navigation -->
+<nav class="segmented-control" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-xs" id="app-nav">
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-ket-qua-do-sau" href="#">Kết quả: Độ sâu</a>
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-giai-thich-mo-hinh-grad-cam" href="#">Giải thích (Grad-CAM)</a>
+</nav>
+<!-- Right: Segmented Role + System Readiness Status -->
+<div class="flex items-center gap-space-md">
+<div class="segmented-control hidden sm:inline-flex">
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all" type="button">Bệnh nhân</button>
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all" type="button">Bác sĩ</button>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1 rounded-full bg-surface-container-lowest/80 border border-outline-variant/30 shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mô hình sẵn sàng</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT SLOT: Buffer pt-14 matches Header h-14 exactly, pb-16 clears fixed footer -->
+<main class="pt-14 pb-16 min-h-[calc(100vh-56px)] max-w-7xl mx-auto px-margin"><div class="flex flex-col w-full relative">
+<!-- DIMMED BACKGROUND LAYER: Mimics BurnScan Step 4/4 Results in the background -->
+<div aria-hidden="true" class="w-full grid grid-cols-12 gap-space-lg select-none opacity-40 pointer-events-none filter blur-[1.5px] py-space-sm">
+<!-- Left patient sidebar placeholder -->
+<div class="col-span-3 flex flex-col gap-space-md">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-xs">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-headline-md text-headline-md">NT</div>
+<div>
+<h4 class="font-headline-md text-headline-md text-on-surface">Nguyễn Tuấn A.</h4>
+<p class="font-caption text-caption text-on-surface-variant">Nam, 34 tuổi · #BS-2024-0988</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-xs flex flex-col gap-space-sm">
+<span class="font-caption text-caption text-outline">TIẾP NHẬN CẤP CỨU</span>
+<div class="h-3 w-3/4 bg-surface-container-highest rounded"></div>
+<div class="h-3 w-1/2 bg-surface-container-highest rounded"></div>
+</div>
+</div>
+<!-- Center medical photo viewport stage -->
+<div class="col-span-6 bg-inverse-surface rounded-xl p-space-md flex flex-col items-center justify-center min-h-[580px]">
+<div class="w-full max-w-md h-72 rounded-lg bg-surface-container-highest/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-surface-container-highest text-[64px]">emergency</span>
+</div>
+</div>
+<!-- Right diagnostics inspector -->
+<div class="col-span-3 flex flex-col gap-space-md">
+<div class="bg-surface-container-lowest p-space-md rounded-xl shadow-xs">
+<div class="h-4 w-28 bg-surface-container-highest rounded mb-3"></div>
+<div class="h-10 w-full bg-secondary-fixed/50 rounded mb-2"></div>
+<div class="h-3 w-4/5 bg-surface-container-highest rounded"></div>
+</div>
+</div>
+</div>
+<!-- MODAL BACKDROP OVERLAY -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-space-md bg-black/45 backdrop-blur-[6px] transition-all">
+<!-- SHEET MODAL CONTAINER: Apple macOS / iPadOS Sheet Form Factor -->
+<div class="w-full max-w-[880px] max-h-[942px] bg-surface-bright/95 rounded-2xl shadow-2xl flex flex-col overflow-hidden ring-1 ring-white/60">
+<!-- TOP SHEET CHROME & HEADER -->
+<div class="pt-space-sm pb-space-sm px-space-xl flex flex-col items-center relative border-b border-surface-container-high/60 bg-surface-container-low/70">
+<!-- Grabber Handle -->
+<div class="w-9 h-1.5 rounded-full bg-outline-variant/70 mb-space-xs"></div>
+<!-- Header Actions Bar -->
+<div class="w-full flex items-center justify-between">
+<div class="w-16">
+<!-- Left spacer for absolute visual centering -->
+<span class="font-caption text-caption text-outline tabular-nums">PDF v1.4</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface tracking-tight text-center">Xuất báo cáo</h2>
+<div class="w-16 flex justify-end">
+<button class="font-label-md text-label-md text-primary hover:opacity-80 active:scale-95 transition-all cursor-pointer" type="button">
+              Xong
+            </button>
+</div>
+</div>
+</div>
+<!-- SHEET BODY: TWO-COLUMN LAYOUT -->
+<div class="p-space-lg grid grid-cols-12 gap-space-lg overflow-hidden flex-1 bg-surface-container-low/30">
+<!-- LEFT COLUMN: CONTROLS & SETTINGS (45%) -->
+<div class="col-span-5 flex flex-col justify-between overflow-y-auto pr-space-xs gap-space-md">
+<div class="flex flex-col gap-space-md">
+<!-- Inset Group 1: Nội dung -->
+<div>
+<span class="font-caption text-caption text-outline uppercase tracking-wider font-semibold ml-space-sm mb-1.5 block">
+                Nội dung xuất
+              </span>
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<!-- Row 1 -->
+<div class="h-11 px-space-md flex items-center justify-between border-b border-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate pr-2">Ảnh gốc &amp; vùng phân đoạn</span>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34C759]"></div>
+</label>
+</div>
+<!-- Row 2 -->
+<div class="h-11 px-space-md flex items-center justify-between border-b border-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate pr-2">Ảnh ROI &amp; Grad-CAM</span>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34C759]"></div>
+</label>
+</div>
+<!-- Row 3 -->
+<div class="h-11 px-space-md flex items-center justify-between border-b border-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate pr-2">Bảng số liệu tổn thương</span>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34C759]"></div>
+</label>
+</div>
+<!-- Row 4 -->
+<div class="h-11 px-space-md flex items-center justify-between border-b border-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate pr-2">Bảng truyền dịch Parkland</span>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34C759]"></div>
+</label>
+</div>
+<!-- Row 5 -->
+<div class="h-11 px-space-md flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface font-medium truncate pr-2">Khuyến nghị của trợ lý AI</span>
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-10 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#34C759]"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Inset Group 2: Thông tin -->
+<div>
+<span class="font-caption text-caption text-outline uppercase tracking-wider font-semibold ml-space-sm mb-1.5 block">
+                Thông tin xác thực
+              </span>
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<!-- Field 1 -->
+<div class="h-12 px-space-md flex items-center justify-between border-b border-surface-container-low">
+<span class="font-body-sm text-body-sm text-on-surface font-medium whitespace-nowrap">Người lập</span>
+<input class="bg-surface-container-low/70 text-right font-label-sm text-label-sm text-on-surface rounded-lg px-2 py-1 outline-none focus:bg-surface-container-lowest focus:ring-1 focus:ring-primary w-48 transition-all" type="text" value="BS. CKII. Nguyễn Văn Trực"/>
+</div>
+<!-- Field 2 -->
+<div class="h-11 px-space-md flex items-center justify-between">
+<span class="font-body-sm text-body-sm text-on-surface font-medium">Thời gian</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant font-mono">24/10/2024 · 14:35</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Action Buttons Group -->
+<div class="flex items-center gap-space-sm pt-space-xs pb-space-xs">
+<!-- Primary Download Button -->
+<button class="flex-1 h-11 bg-primary text-on-primary rounded-xl font-label-md text-label-md flex items-center justify-center gap-2 hover:bg-primary-container active:scale-[0.98] transition-all shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px]">download</span>
+<span>Tải PDF</span>
+</button>
+<!-- Secondary Print Button -->
+<button class="h-11 px-space-md bg-primary-fixed text-on-primary-fixed-variant rounded-xl font-label-md text-label-md flex items-center justify-center gap-1.5 hover:bg-primary-fixed/80 active:scale-[0.98] transition-all shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px]">print</span>
+<span>In</span>
+</button>
+</div>
+</div>
+<!-- RIGHT COLUMN: A4 DOCUMENT PREVIEW CANVAS (55%) -->
+<div class="col-span-7 bg-surface-container-high/80 rounded-xl p-space-md flex justify-center items-start overflow-y-auto max-h-[520px] shadow-inner border border-outline-variant/40">
+<!-- A4 SHEET PREVIEW: Authentic Medical Document Structure -->
+<div class="w-full bg-surface-container-lowest rounded-sm shadow-md p-space-md text-on-surface flex flex-col gap-space-xs select-text text-left">
+<!-- Document Header -->
+<div class="flex items-start justify-between border-b border-surface-container pb-space-xs">
+<div class="flex items-center gap-2">
+<div class="w-7 h-7 rounded bg-primary-container text-on-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">local_fire_department</span>
+</div>
+<div>
+<h5 class="font-caption text-[10px] uppercase font-bold tracking-tight text-on-surface leading-tight">
+                    BỆNH VIỆN BỎNG QUỐC GIA LÊ HỮU TRÁC
+                  </h5>
+<p class="font-caption text-[9px] text-on-surface-variant leading-none">
+                    KHOA CẤP CỨU &amp; HỒI SỨC TÍCH CỰC · HỆ THỐNG BURNSCAN ER
+                  </p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-caption text-[9px] font-mono px-1 py-0.5 rounded bg-surface-container text-on-surface-variant">#BS-2024-0988</span>
+</div>
+</div>
+<!-- Title & Metadata Bar -->
+<div class="py-1 text-center">
+<h3 class="font-headline-md text-[13px] font-bold tracking-wide uppercase text-on-surface">
+                BÁO CÁO PHÂN TÍCH TỔN THƯƠNG BỎNG DA
+              </h3>
+<div class="mt-0.5 py-0.5 px-1 bg-surface-container-low rounded font-caption text-[9px] text-on-surface-variant flex items-center justify-center gap-2">
+<span><strong>BN:</strong> Nam, 34T</span>
+<span>·</span>
+<span><strong>TG:</strong> 24/10/2024 14:35</span>
+<span>·</span>
+<span><strong>BS:</strong> Nguyễn Văn Trực</span>
+</div>
+</div>
+<!-- Visual Heatmaps Row -->
+<div class="grid grid-cols-2 gap-2 my-0.5">
+<!-- Left: Segmentation outline -->
+<div class="bg-surface-container-low rounded p-1 flex flex-col gap-1">
+<div class="relative w-full h-24 rounded overflow-hidden bg-inverse-surface flex items-center justify-center">
+<img class="w-full h-full object-cover opacity-90" data-alt="High quality clinical dermoscopic close-up photograph of a partial thickness burn wound on patient forearm with clear medical segmentation boundary outline overlay in bright cyan glowing line, clinical lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBhd4lgLgYSUlsZtaS9Wk6AXPahLimS8a_0nq40gT3WerY_NilfpPScqwMz9PaSakqjZaz2XuErLlocYTJtvTS9tcyqB1tVnqK-_GVAsGkaqxLvbGbR5c1mS29N6G8kJ4FlMndGvuCvDiEuJg4ZImX60PBGBDz3fkU3XHCqND6MkRf8GYxTVFcUACq8A5sZFLsfnjv8zd-Ut0_klikotvVbKc5NvqlnoJ0OhXQh4cLZ"/>
+<span class="absolute bottom-1 left-1 bg-black/70 backdrop-blur-xs text-white font-caption text-[8px] px-1 py-0.2 rounded font-mono">
+                    U-Net: 45,8 cm²
+                  </span>
+</div>
+<span class="font-caption text-[9px] text-center font-medium text-on-surface-variant leading-tight">
+                  1. Ranh giới phân đoạn tổn thương
+                </span>
+</div>
+<!-- Right: Grad-CAM heatmap -->
+<div class="bg-surface-container-low rounded p-1 flex flex-col gap-1">
+<div class="relative w-full h-24 rounded overflow-hidden bg-inverse-surface flex items-center justify-center">
+<img class="w-full h-full object-cover opacity-90" data-alt="Medical Grad-CAM activation heatmap visualization overlay over dermal burn bed showing red and yellow thermal intensity zones indicating deep partial thickness tissue involvement, hospital AI diagnostic style" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDm3aNBzxOV4kPTjuqowhlIMZ1tj_5vCn4GXunJ-RMl8fe-uTrh67edqPF_6dA-Qnm6LayOvkftUGsRIuCZdkuKpWngxZTczSac8XsA-PhPaRnjUmIMHPW96xpp2RRanMCNfvXPyQrxUkiuk-OhkcAT-qmJeEuKkNYreRVXDvdDd1OdVniKuMJ6SYcfL1eB5oQF_-hqRNe678_u_Fm7MhNWZu37VTWDGwjCxHggoChO"/>
+<span class="absolute bottom-1 left-1 bg-primary-container text-white font-caption text-[8px] px-1 py-0.2 rounded font-mono">
+                    Grad-CAM: 88% Focus
+                  </span>
+</div>
+<span class="font-caption text-[9px] text-center font-medium text-on-surface-variant leading-tight">
+                  2. Bản đồ tập trung Grad-CAM (ResNet50)
+                </span>
+</div>
+</div>
+<!-- Quantitative Metrics Table -->
+<div class="my-0.5">
+<span class="font-caption text-[9px] font-bold uppercase tracking-wider text-outline block mb-0.5">
+                Chỉ số chẩn đoán định lượng
+              </span>
+<div class="grid grid-cols-4 gap-1 text-center font-caption text-[9px]">
+<div class="p-1 bg-surface-container-low rounded">
+<span class="text-on-surface-variant block text-[8px]">Diện tích</span>
+<span class="font-semibold text-on-surface text-[10px]">45,8 cm²</span>
+</div>
+<div class="p-1 bg-surface-container-low rounded">
+<span class="text-on-surface-variant block text-[8px]">TBSA</span>
+<span class="font-semibold text-primary text-[10px]">4,5%</span>
+</div>
+<div class="p-1 bg-surface-container-low rounded">
+<span class="text-on-surface-variant block text-[8px]">Độ sâu AI</span>
+<span class="font-semibold text-error text-[10px]">Độ II (Trung bì)</span>
+</div>
+<div class="p-1 bg-surface-container-low rounded">
+<span class="text-on-surface-variant block text-[8px]">Độ tin cậy</span>
+<span class="font-semibold text-secondary text-[10px]">91,4%</span>
+</div>
+</div>
+</div>
+<!-- Parkland Resuscitation Table -->
+<div class="p-1.5 bg-surface-container-low rounded flex flex-col gap-1 my-0.5">
+<div class="flex items-center justify-between">
+<span class="font-caption text-[9px] font-bold text-on-surface uppercase tracking-tight">
+                  Phác đồ bù dịch Parkland (Cân nặng: 60 kg)
+                </span>
+<span class="font-caption text-[8px] text-primary font-semibold">Ringer Lactate</span>
+</div>
+<div class="grid grid-cols-3 gap-1 text-[8px] font-caption text-center">
+<div class="bg-surface-container-lowest p-1 rounded">
+<span class="text-outline block">Tổng dịch 24h</span>
+<span class="font-bold text-on-surface text-[9px]">4.800 ml</span>
+</div>
+<div class="bg-surface-container-lowest p-1 rounded">
+<span class="text-outline block">8h đầu (50%)</span>
+<span class="font-bold text-on-surface text-[9px]">2.400 ml <span class="font-normal text-[8px]">(300ml/h)</span></span>
+</div>
+<div class="bg-surface-container-lowest p-1 rounded">
+<span class="text-outline block">16h sau (50%)</span>
+<span class="font-bold text-on-surface text-[9px]">2.400 ml <span class="font-normal text-[8px]">(150ml/h)</span></span>
+</div>
+</div>
+</div>
+<!-- Clinical AI Recommendation Note -->
+<div class="p-1.5 bg-surface-container-low/70 rounded border-l-2 border-primary my-0.5">
+<span class="font-caption text-[8px] font-bold text-primary uppercase block">
+                Khuyến nghị trợ lý lâm sàng
+              </span>
+<p class="font-caption text-[8.5px] leading-tight text-on-surface mt-0.5">
+                Tổn thương bọng nước độ 2 nông tại cẳng tay trái. Duy trì vòm bọng nước, sát khuẩn nhẹ bằng NaCl 0.9%, băng gạc mỡ kháng khuẩn vô trùng. Theo dõi lượng nước tiểu đích (0.5 – 1.0 ml/kg/h) và tuần hoàn ngoại vi.
+              </p>
+</div>
+<!-- Document Signature Block -->
+<div class="flex items-end justify-between pt-2 mt-1">
+<div class="font-caption text-[8px] text-outline">
+<span>Hà Nội, ngày 24 tháng 10 năm 2024</span>
+</div>
+<div class="text-center font-caption text-[8px]">
+<span class="font-semibold text-on-surface block">BÁC SĨ ĐIỀU TRỊ</span>
+<span class="italic text-outline block text-[7px] mb-4">(Ký, đóng dấu và ghi rõ họ tên)</span>
+<span class="font-semibold text-on-surface block text-[9px]">BS. CKII. Nguyễn Văn Trực</span>
+</div>
+</div>
+<!-- Disclaimer Footnote -->
+<div class="border-t border-surface-container pt-1 mt-1">
+<p class="font-caption text-[7.5px] text-outline leading-tight text-center">
+                * Báo cáo hỗ trợ chẩn đoán AI theo tiêu chuẩn Bộ Y tế &amp; Đồ án CS406. Kết quả có giá trị tham khảo chuyên môn, không thay thế y lệnh trực tiếp của bác sĩ.
+              </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div></main>
+<!-- BOTTOM FROSTED GLASS BAR -->
+<footer class="fixed bottom-0 left-0 right-0 z-50 glass-bottom h-12">
+<div class="max-w-7xl mx-auto h-full px-margin flex items-center justify-between">
+<div class="font-caption text-caption text-on-surface-variant leading-none flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-outline">info</span>
+<span>Công cụ hỗ trợ tham khảo lâm sàng, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.</span>
+</div>
+<div class="font-caption text-caption text-outline tabular-nums">
+      ResNet50 / Grad-CAM+ | v2.4
+    </div>
+</div>
+</footer>
+</body></html>

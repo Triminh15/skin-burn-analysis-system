@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - Tải ảnh vết bỏng</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    :root {
+      --app-bg: #F2F2F7;
+      --surface: #FFFFFF;
+      --text-primary: #000000;
+      --text-secondary: rgba(60, 60, 67, 0.60);
+      --text-tertiary: rgba(60, 60, 67, 0.30);
+      --separator: rgba(60, 60, 67, 0.29);
+      --control-fill: rgba(120, 120, 128, 0.12);
+      --accent: #007AFF;
+      --accent-tint: rgba(0, 122, 255, 0.12);
+      --grade-ok: #248A3D;
+      --grade-ok-tint: rgba(52, 199, 89, 0.12);
+      --grade-error: #D70015;
+      --grade-error-tint: rgba(255, 59, 48, 0.12);
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+      background-color: var(--app-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Apple Frosted Glass */
+    .glass-light {
+      background: rgba(249, 249, 249, 0.75);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 0.5px solid var(--separator);
+    }
+
+    .glass-bottom {
+      background: rgba(249, 249, 249, 0.78);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .dark-glass-toolbar {
+      background: rgba(28, 28, 30, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+    }
+
+    /* Apple segmented control */
+    .segmented-control {
+      background: rgba(120, 120, 128, 0.14);
+      border-radius: 8px;
+      padding: 2px;
+      display: inline-flex;
+    }
+
+    .segmented-btn {
+      padding: 4px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .segmented-btn.active {
+      background: #FFFFFF;
+      color: #000000;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 0.5px rgba(0, 0, 0, 0.04);
+      font-weight: 600;
+    }
+
+    /* Inset grouped list */
+    .inset-grouped {
+      background: #FFFFFF;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0.5px 1px rgba(0,0,0,0.04);
+    }
+
+    .inset-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .inset-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 52px;
+      right: 0;
+      height: 0.5px;
+      background: var(--separator);
+    }
+
+    .inset-item-dense:not(:last-child)::after {
+      left: 16px;
+    }
+
+    .dropzone-dashed {
+      border: 1.5px dashed #C7C7CC;
+      transition: all 0.2s ease;
+    }
+    .dropzone-dashed:hover {
+      border-color: #007AFF;
+      background-color: rgba(0, 122, 255, 0.02);
+    }
+  </style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/></head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900">
+<!-- TOP TOOLBAR (Apple macOS / iPadOS HIG Light Glass, 52px) -->
+<header class="sticky top-0 z-50 glass-light h-[52px] px-6 flex items-center justify-between">
+<!-- Left: Abstract Brand Logo + Wordmark -->
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-[8px] bg-[#007AFF] flex items-center justify-center text-white shadow-sm">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M12 2c0 4-5 6-5 10a5 5 0 0 0 10 0c0-4-5-6-5-10z"></path>
+<path d="M12 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="flex items-baseline gap-1.5">
+<span class="text-[17px] font-bold tracking-tight text-black">BurnScan</span>
+<span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-[#007AFF] border border-blue-200/50">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Control -->
+<div class="segmented-control">
+<button class="segmented-btn active" id="tab-patient">Bệnh nhân</button>
+<button class="segmented-btn" id="tab-doctor">Bác sĩ</button>
+</div>
+<!-- Right: Model Readiness & Status -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-[rgba(60,60,67,0.12)] shadow-xs">
+<span class="w-2 h-2 rounded-full bg-[#248A3D] animate-pulse"></span>
+<span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">Mô hình sẵn sàng</span>
+</div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT -->
+<main class="flex-1 w-full max-w-[840px] mx-auto px-6 py-8"><div class="flex flex-col w-full max-w-[1140px] mx-auto pb-12">
+<!-- CLINICAL STEPPER (HIG Style: Step 4/4 Active) -->
+<div class="w-full bg-surface-container-lowest rounded-xl p-4 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-3 text-body-sm">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<span class="font-label-sm text-on-surface-variant line-through opacity-80">1. Tải ảnh</span>
+</div>
+<div class="h-0.5 w-6 bg-surface-container-high hidden sm:block"></div>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<span class="font-label-sm text-on-surface-variant line-through opacity-80">2. Thông tin &amp; hiệu chuẩn</span>
+</div>
+<div class="h-0.5 w-6 bg-surface-container-high hidden sm:block"></div>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-sm font-bold">check</span>
+</div>
+<span class="font-label-sm text-on-surface-variant line-through opacity-80">3. Phân tích</span>
+</div>
+<div class="h-0.5 w-6 bg-surface-container-high hidden sm:block"></div>
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold text-xs shadow-sm">
+        4
+      </div>
+<span class="font-label-md text-primary font-semibold">4. Kết quả</span>
+<span class="text-caption px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-medium">Hiện tại</span>
+</div>
+</div>
+<!-- TITLE & ACTIONS HEADER -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-caption uppercase tracking-wider text-outline font-semibold">Giai đoạn chẩn đoán sâu</span>
+<span class="text-outline">/</span>
+<span class="font-caption text-primary font-medium">Phân loại AI</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Kết quả phân tích</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Phân loại độ sâu tổn thương mô bằng mô hình ResNet-34</p>
+</div>
+<div class="flex items-center gap-3">
+<button class="h-10 px-4 rounded-lg bg-surface-container-lowest text-primary hover:bg-surface-container transition-all flex items-center gap-2 font-label-md text-label-md shadow-sm">
+<span class="material-symbols-outlined text-lg">picture_as_pdf</span>
+<span>Xuất PDF</span>
+</button>
+<button class="h-10 px-4 rounded-lg bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container transition-all flex items-center gap-2 font-label-md text-label-md shadow-sm">
+<span class="material-symbols-outlined text-lg">share</span>
+<span>Chia sẻ</span>
+</button>
+</div>
+</div>
+<!-- HIG SEGMENTED CONTROL TABS (Step 4 Inner Tabs) -->
+<div class="w-full bg-surface-container rounded-xl p-1 mb-8 inline-flex overflow-x-auto">
+<button class="flex-1 min-w-[120px] py-2 px-3 rounded-lg text-center font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-base">crop_free</span>
+<span>Phân đoạn</span>
+</button>
+<button class="flex-1 min-w-[120px] py-2 px-3 rounded-lg bg-surface-container-lowest text-on-surface font-label-md text-label-md font-semibold shadow-sm flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-base text-primary">layers</span>
+<span>Độ sâu</span>
+<span class="w-1.5 h-1.5 rounded-full bg-primary ml-0.5"></span>
+</button>
+<button class="flex-1 min-w-[120px] py-2 px-3 rounded-lg text-center font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-base">emergency</span>
+<span>Cấp cứu &amp; Bù dịch</span>
+</button>
+<button class="flex-1 min-w-[120px] py-2 px-3 rounded-lg text-center font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center gap-1.5">
+<span class="material-symbols-outlined text-base">chat_bubble_outline</span>
+<span>Hỏi đáp (AI)</span>
+</button>
+</div>
+<!-- MAIN VIEWPORT GRID: 50 / 50 SPLIT -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+<!-- LEFT COLUMN: MEDICAL VIEWPORT -->
+<div class="flex flex-col w-full">
+<div class="relative bg-inverse-surface rounded-2xl overflow-hidden aspect-square flex items-center justify-center p-6 shadow-md">
+<!-- Medical Crop / ROI Image Preview -->
+<div class="relative w-full h-full rounded-xl overflow-hidden bg-black flex items-center justify-center">
+<img class="w-full h-full object-cover transition-opacity duration-300" data-alt="Close-up macro medical photograph of human skin displaying a partial thickness second degree burn with clear fluid-filled blister formation, erythematous pink base, glistening raw dermis under neutral 5500K clinical surgical lighting, highly clinical and objective capture." id="viewport-image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSXIlJjQKYuyrNHp9edO4FaT2HavhpacnDljLE-usuUwSWLdDs1NKslT_oyiczwyovmQYv7Wbh9VHmaluoNg5jDD9vHqfeYDUJZV0M4KJo9GD6-5zO7JNcL4ENOhctekaPTs4m-R0GoI9oNDT_1e6jAfnkuM47YvG3z9W2VU9tyJealJz7ygjo9opZMWOENswnG32jGZjRnK-HhTnpdhum9Ecw9G-qomsL5eQoraah"/>
+<!-- Heatmap Overlay (Toggled via Grad-CAM switch) -->
+<div class="absolute inset-0 bg-gradient-to-tr from-tertiary-container/40 via-secondary-container/20 to-primary-container/30 mix-blend-color-dodge opacity-0 pointer-events-none transition-opacity duration-300" id="gradcam-overlay">
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 100">
+<radialgradient cx="48%" cy="52%" id="heat1" r="42%">
+<stop offset="0%" stop-color="#ba1a1a" stop-opacity="0.75"></stop>
+<stop offset="45%" stop-color="#ffdad6" stop-opacity="0.5"></stop>
+<stop offset="85%" stop-color="#0058bc" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="transparent" stop-opacity="0"></stop>
+</radialgradient>
+<circle cx="48" cy="52" fill="url(#heat1)" r="40"></circle>
+</svg>
+</div>
+<!-- Medical Grid Scale Markings -->
+<div class="absolute inset-0 pointer-events-none grid grid-cols-4 grid-rows-4 opacity-15">
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+<div class="bg-surface-container-lowest/5"></div>
+<div class="bg-surface-container-lowest/10"></div>
+</div>
+<!-- Calibration Tag Overlay Top Left -->
+<div class="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-inverse-surface/80 backdrop-blur-md text-surface-bright font-caption text-caption flex items-center gap-1.5 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span>ROI Định chuẩn: 224 × 224 px</span>
+</div>
+<!-- Zoom HUD Icon Top Right -->
+<button class="absolute top-3 right-3 w-8 h-8 rounded-full bg-inverse-surface/80 backdrop-blur-md text-surface-bright flex items-center justify-center hover:bg-inverse-surface transition-colors shadow-sm">
+<span class="material-symbols-outlined text-sm">fullscreen</span>
+</button>
+</div>
+<!-- Floating Apple Glass Toolbar Bottom Overlay -->
+<div class="absolute bottom-6 left-10 right-10 bg-inverse-surface/75 backdrop-blur-md rounded-full px-5 py-3 flex items-center justify-between text-surface-bright shadow-xl">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary-fixed-dim text-lg">local_fire_department</span>
+<span class="font-label-sm text-label-sm font-medium">Bản đồ nhiệt (Grad-CAM)</span>
+</div>
+<!-- iOS Style Switch Toggle -->
+<button aria-checked="false" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full bg-outline/40 transition-colors duration-200 ease-in-out focus:outline-none" id="gradcam-toggle" onclick="toggleGradCAM()" role="switch">
+<span class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-surface-container-lowest shadow-md ring-0 transition duration-200 ease-in-out translate-x-0.5 mt-0.5" id="gradcam-thumb"></span>
+</button>
+</div>
+</div>
+<!-- Image Metadata Footnote -->
+<div class="mt-2.5 px-1 flex flex-wrap items-center justify-between text-caption font-caption text-on-surface-variant">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">tune</span>
+          Ảnh cắt vuông 224 × 224 px đưa vào ResNet-34
+        </span>
+<span class="tabular-nums">Độ phóng đại 1.5× · Tiêu cự tự động</span>
+</div>
+</div>
+<!-- RIGHT COLUMN: DIAGNOSTIC INSPECTOR -->
+<div class="flex flex-col gap-4">
+<!-- 1. RESULT PRIMARY CARD -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm">
+<div class="flex items-center justify-between gap-3 flex-wrap">
+<div class="bg-tertiary-fixed text-on-tertiary-fixed-variant px-3 py-1 rounded-full text-label-md font-label-md inline-flex items-center gap-1.5 shadow-xs">
+<span class="material-symbols-outlined text-base">warning</span>
+<span>Bỏng độ 2</span>
+</div>
+<div class="flex items-center gap-1.5 bg-surface-container-low px-3 py-1 rounded-full">
+<span class="font-caption text-on-surface-variant">Độ tin cậy:</span>
+<span class="font-headline-md text-headline-md text-on-surface tabular-nums font-bold">91,4 %</span>
+<span class="material-symbols-outlined text-secondary text-sm">verified</span>
+</div>
+</div>
+<div class="mt-3">
+<div class="font-label-md text-label-md text-tertiary font-semibold flex items-center gap-1.5">
+<span>Mức độ tổn thương: Trung bình</span>
+<span class="text-outline">·</span>
+<span class="text-tertiary">Nguy cơ nhiễm trùng cao</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-2 leading-relaxed">
+            Tổn thương toàn bộ lớp biểu bì (thượng bì) và ăn sâu vào lớp trung bì (hạ bì nông). Xuất hiện bọng nước căng dịch huyết thanh, đáy vết thương ẩm đỏ, đáp ứng đau rát nhạy cảm rõ rệt. Cần làm sạch vô khuẩn ngay lập tức.
+          </p>
+</div>
+</div>
+<!-- 2. INSET GROUP: XÁC SUẤT PHÂN LOẠI RESNET-34 -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-4 pt-3 pb-2 flex items-center justify-between">
+<span class="font-caption text-caption text-outline font-semibold uppercase tracking-wider">Xác suất phân loại ResNet-34</span>
+<span class="font-caption text-caption text-outline tabular-nums">Tổng chuẩn hóa 100%</span>
+</div>
+<!-- Row 1: Độ 1 -->
+<div class="px-4 py-3 flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="w-14 flex items-center gap-1">
+<span class="font-label-sm text-label-sm text-on-surface">Độ 1</span>
+</div>
+<div class="flex-1 bg-surface-container-high h-2 rounded-full mx-4 overflow-hidden">
+<div class="bg-secondary h-full rounded-full transition-all duration-500" style="width: 5.2%;"></div>
+</div>
+<div class="w-16 text-right font-body-sm text-body-sm text-on-surface-variant tabular-nums font-medium">
+            5,2 %
+          </div>
+</div>
+<div class="h-0.5 bg-surface-container ml-14"></div>
+<!-- Row 2: Độ 2 (ACTIVE PRIMARY PREDICTION) -->
+<div class="px-4 py-3.5 bg-tertiary-fixed/30 flex items-center justify-between">
+<div class="w-14 flex items-center gap-1.5">
+<span class="font-label-md text-label-md text-on-surface font-bold">Độ 2</span>
+</div>
+<div class="flex-1 bg-surface-container-high h-2.5 rounded-full mx-4 overflow-hidden">
+<div class="bg-tertiary h-full rounded-full transition-all duration-500" style="width: 91.4%;"></div>
+</div>
+<div class="w-auto flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-caption font-label-sm bg-tertiary text-on-tertiary">Dự đoán</span>
+<span class="w-16 text-right font-headline-md text-headline-md text-tertiary tabular-nums font-bold">
+              91,4 %
+            </span>
+</div>
+</div>
+<div class="h-0.5 bg-surface-container ml-14"></div>
+<!-- Row 3: Độ 3 -->
+<div class="px-4 py-3 flex items-center justify-between hover:bg-surface-container-low transition-colors">
+<div class="w-14 flex items-center gap-1">
+<span class="font-label-sm text-label-sm text-on-surface">Độ 3</span>
+</div>
+<div class="flex-1 bg-surface-container-high h-2 rounded-full mx-4 overflow-hidden">
+<div class="bg-outline h-full rounded-full transition-all duration-500" style="width: 3.4%;"></div>
+</div>
+<div class="w-16 text-right font-body-sm text-body-sm text-on-surface-variant tabular-nums font-medium">
+            3,4 %
+          </div>
+</div>
+</div>
+<!-- 3. INSET GROUP: Ý NGHĨA CÁC ĐỘ BỎNG -->
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<div class="px-4 pt-3 pb-2">
+<span class="font-caption text-caption text-outline font-semibold uppercase tracking-wider">Ý nghĩa các độ bỏng lâm sàng</span>
+</div>
+<!-- Row 1 -->
+<div class="px-4 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors">
+<div class="w-8 h-8 rounded-full bg-secondary-fixed flex items-center justify-center text-secondary shrink-0">
+<span class="material-symbols-outlined text-base">check_circle</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-sm text-label-sm text-on-surface font-semibold">Độ 1 – Tổn thương nông bề mặt</div>
+<div class="font-caption text-caption text-on-surface-variant truncate">Đỏ da khô, không có bóng nước, lành sau 3-6 ngày không để sẹo</div>
+</div>
+</div>
+<div class="h-0.5 bg-surface-container ml-14"></div>
+<!-- Row 2 -->
+<div class="px-4 py-3 flex items-center gap-3 bg-tertiary-fixed/20 transition-colors">
+<div class="w-8 h-8 rounded-full bg-tertiary-fixed flex items-center justify-center text-on-tertiary-fixed-variant shrink-0">
+<span class="material-symbols-outlined text-base">warning</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-sm text-label-sm text-tertiary font-bold">Độ 2 – Trung bình, nguy cơ nhiễm trùng</div>
+<div class="font-caption text-caption text-on-surface-variant truncate">Bóng nước rỉ dịch, hạ bì tổn thương, cần băng vô trùng &amp; theo dõi ER</div>
+</div>
+</div>
+<div class="h-0.5 bg-surface-container ml-14"></div>
+<!-- Row 3 -->
+<div class="px-4 py-3 flex items-center gap-3 hover:bg-surface-container-low transition-colors">
+<div class="w-8 h-8 rounded-full bg-error-container flex items-center justify-center text-error shrink-0">
+<span class="material-symbols-outlined text-base">dangerous</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-label-sm text-label-sm text-on-surface font-semibold">Độ 3 – Nặng, cấp cứu khẩn cấp</div>
+<div class="font-caption text-caption text-on-surface-variant truncate">Hoại tử khô/trắng bệch toàn bộ lớp da, mất cảm giác, cần chuyển viện chuyên khoa</div>
+</div>
+</div>
+</div>
+<!-- 4. INTERACTIVE LINK ROW -->
+<a class="mt-1 px-3 py-2 rounded-lg bg-surface-container-lowest hover:bg-primary-fixed/30 flex items-center justify-between text-primary font-label-md text-label-md transition-colors group shadow-xs" href="javascript:void(0)" onclick="toggleGradCAM()">
+<span class="flex items-center gap-2">
+<span class="material-symbols-outlined text-lg">visibility</span>
+<span>Xem mô hình nhìn vào đâu (Grad-CAM Attention Map)</span>
+</span>
+<span class="material-symbols-outlined text-base transform group-hover:translate-x-1 transition-transform">chevron_right</span>
+</a>
+</div>
+</div>
+<!-- BOTTOM WORKFLOW ACTION PROMPT -->
+<div class="mt-8 bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+<div class="flex items-center gap-3 text-on-surface-variant font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-primary text-xl">medical_information</span>
+<span>Đã hoàn tất phân loại tổn thương. Bước kế tiếp: Tính toán dịch truyền theo phác đồ Parkland.</span>
+</div>
+<div class="flex items-center gap-2 w-full sm:w-auto">
+<button class="h-10 px-5 rounded-lg bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high transition-colors flex-1 sm:flex-initial">
+        Chẩn đoán lại
+      </button>
+<button class="h-10 px-6 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary/90 transition-all shadow-sm flex items-center justify-center gap-1.5 flex-1 sm:flex-initial">
+<span>Tiếp tục sang Bù dịch Parkland</span>
+<span class="material-symbols-outlined text-sm">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+<script>
+  let gradcamActive = false;
+
+  function toggleGradCAM() {
+    gradcamActive = !gradcamActive;
+    const overlay = document.getElementById('gradcam-overlay');
+    const toggle = document.getElementById('gradcam-toggle');
+    const thumb = document.getElementById('gradcam-thumb');
+
+    if (gradcamActive) {
+      overlay.classList.remove('opacity-0');
+      overlay.classList.add('opacity-100');
+      toggle.classList.remove('bg-outline/40');
+      toggle.classList.add('bg-primary');
+      thumb.classList.remove('translate-x-0.5');
+      thumb.classList.add('translate-x-5');
+      toggle.setAttribute('aria-checked', 'true');
+    } else {
+      overlay.classList.remove('opacity-100');
+      overlay.classList.add('opacity-0');
+      toggle.classList.remove('bg-primary');
+      toggle.classList.add('bg-outline/40');
+      thumb.classList.remove('translate-x-5');
+      thumb.classList.add('translate-x-0.5');
+      toggle.setAttribute('aria-checked', 'false');
+    }
+  }
+</script></main>
+<!-- BOTTOM GLASS ACTION BAR (Fixed for Apple iPadOS/macOS HIG) -->
+<footer class="sticky bottom-0 z-50 glass-bottom px-6 py-3">
+<div class="max-w-[840px] mx-auto flex items-center justify-between">
+<!-- Footer disclaimer required by user spec -->
+<div class="text-[12px] text-[rgba(60,60,67,0.65)] leading-tight hidden md:block">
+        Công cụ hỗ trợ tham khảo, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.
+      </div>
+<!-- Action buttons -->
+<div class="flex items-center gap-3 ml-auto w-full md:w-auto justify-end">
+<!-- Secondary Tinted Button: "Chọn lại" -->
+<button class="h-10 px-5 rounded-[10px] bg-[rgba(0,122,255,0.12)] text-[#007AFF] font-medium text-[15px] hover:bg-[rgba(0,122,255,0.18)] active:scale-[0.98] transition-all flex items-center justify-center min-w-[100px]" onclick="switchView('frame1')">
+          Chọn lại
+        </button>
+<!-- Primary Solid Blue Button: "Tiếp tục" -->
+<button class="h-10 px-6 rounded-[10px] bg-[#007AFF] text-white font-medium text-[15px] hover:bg-[#006ee6] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xs min-w-[120px]" id="btn-continue" onclick="handleContinue()">
+<span>Tiếp tục</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<polyline points="9 18 15 12 9 6"></polyline>
+</svg>
+</button>
+</div>
+</div>
+</footer>
+<!-- JAVASCRIPT STATE CONTROLLER (Allows toggling Frame 1, Frame 2, Frame 3 seamlessly) -->
+<script>
+    function switchView(frameId) {
+      const uploadContainer = document.getElementById('upload-panel-container');
+      const previewContainer = document.getElementById('preview-panel-container');
+      const errorBanner = document.getElementById('error-banner');
+      const btnF1 = document.getElementById('btn-f1');
+      const btnF2 = document.getElementById('btn-f2');
+      const btnF3 = document.getElementById('btn-f3');
+      const btnContinue = document.getElementById('btn-continue');
+
+      // Reset button styles
+      [btnF1, btnF2, btnF3].forEach(b => {
+        b.className = "px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all";
+      });
+
+      if (frameId === 'frame1') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.add('hidden');
+        btnF1.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame2') {
+        uploadContainer.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+        errorBanner.classList.add('hidden');
+        btnF2.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.remove('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame3') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.remove('hidden');
+        btnF3.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function dismissError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function handleContinue() {
+      alert("Chuyển sang Bước 2: Thông tin lâm sàng bệnh nhân.");
+    }
+
+    // Interactive file input simulator
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        switchView('frame2');
+      }
+    });
+
+    // Default initialize on Frame 1 (Drop zone view)
+    switchView('frame1');
+  </script>
+</body></html>

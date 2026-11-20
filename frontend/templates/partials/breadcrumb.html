@@ -1,0 +1,44 @@
+    <!-- ========================================================================= -->
+    <!-- STEP PROGRESS BREADCRUMB (1. Tải ảnh · 2. Thông tin · 3. Phân tích · 4. Kết quả) -->
+    <!-- ========================================================================= -->
+    <nav aria-label="Tiến trình đánh giá" class="mb-7">
+      <div class="flex items-center justify-between max-w-[860px] mx-auto bg-white/70 p-3 rounded-2xl border border-[rgba(60,60,67,0.08)] shadow-xs">
+        <!-- Step 1 Indicator -->
+        <div class="flex items-center gap-2.5 cursor-pointer" onclick="goToStep(1)" id="step-nav-1">
+          <div class="w-7 h-7 rounded-full bg-[#007AFF] text-white flex items-center justify-center text-[13px] font-semibold shadow-xs step-circle" id="circle-step-1">
+            1
+          </div>
+          <span class="text-[14px] font-semibold text-[#007AFF] step-label" id="label-step-1">Tải ảnh</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 2 Indicator -->
+        <div class="flex items-center gap-2.5 cursor-pointer opacity-50" onclick="goToStep(2)" id="step-nav-2">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium step-circle" id="circle-step-2">
+            2
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)] step-label" id="label-step-2">Thông tin & Hiệu chuẩn</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 3 Indicator -->
+        <div class="flex items-center gap-2.5 opacity-50" id="step-nav-3">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium step-circle" id="circle-step-3">
+            3
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)] step-label" id="label-step-3">Phân tích AI</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 4 Indicator -->
+        <div class="flex items-center gap-2.5 cursor-pointer opacity-50" onclick="goToStep(4)" id="step-nav-4">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium step-circle" id="circle-step-4">
+            4
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)] step-label" id="label-step-4">Kết quả lâm sàng</span>
+        </div>
+      </div>
+    </nav>

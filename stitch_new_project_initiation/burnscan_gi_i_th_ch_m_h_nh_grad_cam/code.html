@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - ER Triage</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container-lowest": "#ffffff",
+          "surface-container-high": "#e8e8ed",
+          "on-tertiary-fixed-variant": "#93000a",
+          "surface-bright": "#f9f9fe",
+          "tertiary": "#bb0011",
+          "on-primary-fixed-variant": "#004493",
+          "secondary": "#006e28",
+          "surface-dim": "#d9dade",
+          "background": "#f9f9fe",
+          "on-primary-container": "#fefcff",
+          "secondary-fixed": "#95f99d",
+          "outline-variant": "#c1c6d7",
+          "surface-container": "#ededf2",
+          "on-primary-fixed": "#001a41",
+          "secondary-fixed-dim": "#79dc84",
+          "primary-container": "#0070eb",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed": "#002107",
+          "secondary-container": "#95f99d",
+          "outline": "#717786",
+          "on-tertiary-container": "#fffbff",
+          "surface-variant": "#e2e2e7",
+          "primary-fixed-dim": "#adc6ff",
+          "error-container": "#ffdad6",
+          "on-secondary": "#ffffff",
+          "tertiary-fixed": "#ffdad6",
+          "surface": "#f9f9fe",
+          "surface-tint": "#005bc1",
+          "on-surface-variant": "#414755",
+          "primary": "#0058bc",
+          "inverse-primary": "#adc6ff",
+          "inverse-surface": "#2e3034",
+          "on-error": "#ffffff",
+          "error": "#ba1a1a",
+          "inverse-on-surface": "#f0f0f5",
+          "surface-container-highest": "#e2e2e7",
+          "on-tertiary-fixed": "#410002",
+          "tertiary-container": "#e6171e",
+          "primary-fixed": "#d8e2ff",
+          "on-primary": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "on-secondary-fixed-variant": "#00531d",
+          "on-surface": "#1a1c1f",
+          "on-secondary-container": "#00752b",
+          "on-background": "#1a1c1f",
+          "surface-container-low": "#f3f3f8",
+          "tertiary-fixed-dim": "#ffb4ab"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-xl": "1.5rem",
+          "margin": "1.5rem",
+          "space-lg": "1rem",
+          "space-xs": "0.25rem",
+          "gutter": "1rem",
+          "space-md": "0.75rem"
+        },
+        "fontFamily": {
+          "headline-md": ["Inter"],
+          "headline-xl": ["Inter"],
+          "body-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "caption": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"]
+        },
+        "fontSize": {
+          "headline-md": ["17px", {"lineHeight": "22px", "fontWeight": "600"}],
+          "headline-xl": ["32px", {"lineHeight": "38px", "fontWeight": "700"}],
+          "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+          "body-lg": ["17px", {"lineHeight": "22px", "fontWeight": "400"}],
+          "headline-lg": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+          "label-sm": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+          "caption": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+          "label-md": ["15px", {"lineHeight": "20px", "fontWeight": "600"}]
+        }
+      },
+    },
+  }
+</script>
+<style>
+  @layer base {
+    html {
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+  .glass-light {
+    background: rgba(249, 249, 249, 0.75);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .glass-bottom {
+    background: rgba(249, 249, 249, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .segmented-control {
+    background: rgba(120, 120, 128, 0.14);
+    border-radius: 8px;
+    padding: 2px;
+    display: inline-flex;
+  }
+</style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet"/>
+</head>
+<body class="bg-background text-on-background min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TOP FROSTED GLASS BAR (Exact height: h-14 / 56px) -->
+<header class="fixed top-0 left-0 right-0 z-50 glass-light">
+<div class="h-14 px-margin flex items-center justify-between max-w-7xl mx-auto">
+<!-- Brand & Clinical Badge -->
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[20px]">local_fire_department</span>
+</div>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-md text-headline-md tracking-tight text-on-surface">BurnScan</span>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Navigation -->
+<nav class="segmented-control" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-xs" id="app-nav">
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-ket-qua-do-sau" href="#">Kết quả: Độ sâu</a>
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-giai-thich-mo-hinh-grad-cam" href="#">Giải thích (Grad-CAM)</a>
+</nav>
+<!-- Right: Segmented Role + System Readiness Status -->
+<div class="flex items-center gap-space-md">
+<div class="segmented-control hidden sm:inline-flex">
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all" type="button">Bệnh nhân</button>
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all" type="button">Bác sĩ</button>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1 rounded-full bg-surface-container-lowest/80 border border-outline-variant/30 shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mô hình sẵn sàng</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT SLOT: Buffer pt-14 matches Header h-14 exactly, pb-16 clears fixed footer -->
+<main class="pt-14 pb-16 min-h-[calc(100vh-56px)] max-w-7xl mx-auto px-margin">
+<div class="flex flex-col w-full">
+<!-- TOP CONTEXT BAR: Breadcrumb Back + Multi-step Workflow Indicator -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md pb-space-lg mb-space-md border-b border-surface-container-highest">
+<!-- Breadcrumb back link -->
+<a class="inline-flex items-center gap-1 font-label-md text-label-md text-primary hover:text-primary/80 transition-colors group" href="#">
+<span class="material-symbols-outlined text-[20px] transition-transform group-hover:-translate-x-0.5">chevron_left</span>
+<span>Độ sâu</span>
+</a>
+<!-- Step Indicator (Step 4 active, Steps 1-3 completed) -->
+<div class="flex items-center gap-space-xs overflow-x-auto py-1">
+<!-- Step 1 -->
+<div class="flex items-center gap-1.5 opacity-70">
+<span class="w-5 h-5 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-caption text-[11px] font-bold">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+<span class="font-caption text-caption text-on-surface whitespace-nowrap">Tiếp nhận</span>
+</div>
+<span class="w-4 h-0.5 bg-secondary/40"></span>
+<!-- Step 2 -->
+<div class="flex items-center gap-1.5 opacity-70">
+<span class="w-5 h-5 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-caption text-[11px] font-bold">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+<span class="font-caption text-caption text-on-surface whitespace-nowrap">Ảnh chụp</span>
+</div>
+<span class="w-4 h-0.5 bg-secondary/40"></span>
+<!-- Step 3 -->
+<div class="flex items-center gap-1.5 opacity-70">
+<span class="w-5 h-5 rounded-full bg-secondary text-on-secondary flex items-center justify-center font-caption text-[11px] font-bold">
+<span class="material-symbols-outlined text-[14px]">check</span>
+</span>
+<span class="font-caption text-caption text-on-surface whitespace-nowrap">Phân đoạn</span>
+</div>
+<span class="w-4 h-0.5 bg-primary"></span>
+<!-- Step 4: Active -->
+<div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary-fixed">
+<span class="w-5 h-5 rounded-full bg-primary text-on-primary flex items-center justify-center font-caption text-[11px] font-bold">4</span>
+<span class="font-caption text-caption font-semibold text-on-primary-fixed whitespace-nowrap">Kết quả & AI</span>
+</div>
+<span class="w-4 h-0.5 bg-outline-variant"></span>
+<!-- Step 5 -->
+<div class="flex items-center gap-1.5 opacity-40">
+<span class="w-5 h-5 rounded-full bg-surface-container-high text-on-surface-variant flex items-center justify-center font-caption text-[11px]">5</span>
+<span class="font-caption text-caption text-on-surface-variant whitespace-nowrap">Parkland</span>
+</div>
+</div>
+</div>
+<!-- TITLE ROW + ACTION BUTTONS -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-lg mb-space-lg">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="font-caption text-caption font-semibold uppercase tracking-wider text-primary">Giải thích mô hình AI</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span class="font-caption text-caption text-on-surface-variant">BN-2024-0819 · Ca trực Cấp cứu</span>
+</div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Kết quả phân tích Grad-CAM</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">
+        Bản đồ kích hoạt cục bộ (Gradient-weighted Class Activation Mapping) cho mạng nơ-ron tích chập ResNet-34
+      </p>
+</div>
+<!-- Right-aligned tinted action buttons -->
+<div class="flex items-center gap-space-sm shrink-0">
+<button class="h-10 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">download</span>
+<span>Xuất PDF</span>
+</button>
+<button class="h-10 px-space-md rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md flex items-center gap-1.5 transition-colors shadow-xs" type="button">
+<span class="material-symbols-outlined text-[18px] text-primary">share</span>
+<span>Chia sẻ ca bệnh</span>
+</button>
+</div>
+</div>
+<!-- SUB-NAVIGATION SEGMENTED CONTROL -->
+<div class="mb-space-xl">
+<div class="inline-flex p-1 rounded-xl bg-surface-container w-full sm:w-auto overflow-x-auto shadow-inner">
+<button class="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap" type="button">
+        Phân đoạn TBSA
+      </button>
+<button class="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg font-label-sm text-label-sm bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all whitespace-nowrap" type="button">
+        Độ sâu tổn thương
+      </button>
+<button class="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap" type="button">
+        Cấp cứu & Bù dịch
+      </button>
+<button class="flex-1 sm:flex-initial px-4 py-1.5 rounded-lg font-label-sm text-label-sm text-on-surface-variant hover:text-on-surface transition-all whitespace-nowrap" type="button">
+        Hỏi đáp (AI)
+      </button>
+</div>
+</div>
+<!-- MAIN TWO-COLUMN WORKSPACE: 60% Left / 40% Right -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start pb-space-xl">
+<!-- LEFT COLUMN (60% -> 7 Cols in 12-col grid) -->
+<div class="lg:col-span-7 flex flex-col gap-space-md">
+<!-- Clinical Image Viewer Frame (#1C1C1E Dark Medical Stage) -->
+<div class="relative w-full rounded-2xl bg-[#1C1C1E] border border-[#2C2C2E] overflow-hidden shadow-md flex flex-col">
+<!-- Top Floating Dark-Glass Control HUD -->
+<div class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+<!-- Glass pill segmented control -->
+<div class="pointer-events-auto bg-[#1C1C1E]/80 backdrop-blur-md border border-white/15 rounded-full p-1 flex items-center gap-0.5 shadow-lg">
+<button class="view-btn px-3 py-1 rounded-full font-caption text-caption text-white/70 hover:text-white transition-all" id="view-mode-orig" type="button">
+              Ảnh gốc
+            </button>
+<button class="view-btn px-3 py-1 rounded-full font-caption text-caption text-white/70 hover:text-white transition-all" id="view-mode-heat" type="button">
+              Bản đồ nhiệt
+            </button>
+<button class="view-btn active-view px-3 py-1 rounded-full font-caption text-caption font-semibold bg-white text-black shadow-xs transition-all" id="view-mode-overlay" type="button">
+              Phủ chồng
+            </button>
+</div>
+<!-- Utility actions pill -->
+<div class="pointer-events-auto bg-[#1C1C1E]/80 backdrop-blur-md border border-white/15 rounded-full px-2 py-1 flex items-center gap-1 shadow-lg text-white/80">
+<button class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 hover:text-white transition-colors" title="Phóng to" type="button">
+<span class="material-symbols-outlined text-[16px]">zoom_in</span>
+</button>
+<button class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 hover:text-white transition-colors" title="Thu nhỏ" type="button">
+<span class="material-symbols-outlined text-[16px]">zoom_out</span>
+</button>
+<button class="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 hover:text-white transition-colors" title="Toàn màn hình" type="button">
+<span class="material-symbols-outlined text-[16px]">fullscreen</span>
+</button>
+</div>
+</div>
+<!-- The Medical Viewport Image & Thermal Overlay Canvas -->
+<div class="relative w-full aspect-[4/3] sm:aspect-[16/11] bg-black overflow-hidden flex items-center justify-center">
+<!-- Authentic Clinical Wound Image -->
+<img alt="Vết bỏng cẳng tay - Phân tích lâm sàng" class="absolute inset-0 w-full h-full object-cover transition-opacity duration-300" data-alt="Close-up clinical macro photograph of a second-degree burn wound on a patient forearm in a sterile hospital emergency triage room. Clear epidermal detachment with ruptured blisters, moist erythematous wound bed with yellowish exudate, hyperemic surrounding tissue and demarcation margin under neutral high-CRI clinical LED medical lighting." id="clinical-image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBwkXvvONNDoEb8mNDuyKRoDEuZgYfU-jTpaGdDymEAHBGAg7eHYz1hdFmrO4YnDiICaNkZzqdZS0hYdZeUaWZGF_yEUAlHg2KZpq-TdORlXAOMqnpS7d7tBrjKmW9OcqA8LAgppbdeIvPpEyi_LefYLATq_kNEDnGow9PcXbPVt0_3Ji2eFsSvSjdlPukyHPiHS2mR29ZXlR1apso1sxtbueQvGh89vWUo9YiskqA8"/>
+<!-- Grad-CAM Gradient Simulation Heatmap Layer with 60% opacity blend -->
+<div class="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300" id="gradcam-heatmap" style="opacity: 0.60; mix-blend-mode: screen; background: radial-gradient(circle at 48% 52%, #FF3B30 0%, #FF9500 24%, #FFCC00 42%, #34C759 62%, #007AFF 82%, rgba(88, 86, 214, 0) 100%);">
+<!-- Secondary micro-foci of activation -->
+<div class="absolute inset-0 w-full h-full" style="background: radial-gradient(circle at 62% 44%, rgba(255, 59, 48, 0.85) 0%, rgba(255, 204, 0, 0.5) 28%, transparent 55%); mix-blend-mode: color-dodge;"></div>
+</div>
+<!-- Anatomical Crosshair & Measurement reticle overlay -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none opacity-40" xmlns="http://www.w3.org/2000/svg">
+<line stroke="rgba(255,255,255,0.25)" stroke-dasharray="3 3" stroke-width="0.5" x1="48%" x2="48%" y1="0" y2="100%"></line>
+<line stroke="rgba(255,255,255,0.25)" stroke-dasharray="3 3" stroke-width="0.5" x1="0" x2="100%" y1="52%" y2="52%"></line>
+<circle cx="48%" cy="52%" fill="none" r="80" stroke="rgba(255,255,255,0.3)" stroke-dasharray="4 4" stroke-width="1"></circle>
+</svg>
+<!-- Hotspot Annotation Badge on Viewer -->
+<div class="absolute bottom-12 left-5 z-20 pointer-events-none bg-[#1C1C1E]/80 backdrop-blur-md border border-white/20 rounded-lg px-2.5 py-1.5 flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-[#FF3B30] animate-ping"></span>
+<span class="font-caption text-[11px] font-medium text-white tracking-wide">Tâm kích hoạt: [X: 112, Y: 118] (Score: 0.941)</span>
+</div>
+<!-- Slim Vertical Grad-CAM Legend / Color Gradient Bar on Right Edge -->
+<div class="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex items-center gap-2 pointer-events-none select-none">
+<!-- Label Stack -->
+<div class="flex flex-col justify-between h-[220px] text-right font-caption text-[11px] font-medium text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+<span class="flex items-center gap-1 justify-end">
+<span>1.0</span>
+<span class="text-white/80 text-[10px]">Cao</span>
+</span>
+<span class="text-white/70">0.75</span>
+<span class="text-white/70">0.50</span>
+<span class="text-white/70">0.25</span>
+<span class="flex items-center gap-1 justify-end">
+<span>0.0</span>
+<span class="text-white/80 text-[10px]">Thấp</span>
+</span>
+</div>
+<!-- Gradient pill bar -->
+<div class="relative w-3 h-[220px] rounded-full p-0.5 border border-white/30 bg-black/40 backdrop-blur-sm flex flex-col justify-between shadow-2xl">
+<div class="w-full h-full rounded-full" style="background: linear-gradient(to bottom, #FF3B30 0%, #FF9500 25%, #FFCC00 45%, #34C759 68%, #007AFF 88%, #5856D6 100%);"></div>
+</div>
+</div>
+</div>
+<!-- Viewer Footer Info Bar -->
+<div class="px-4 py-3 bg-[#1C1C1E] border-t border-[#2C2C2E] flex flex-wrap items-center justify-between gap-2 text-white/70 font-caption text-caption">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-primary-fixed-dim">analytics</span>
+<span class="tabular-nums">ROI 224 × 224 px · Layer4 Conv5_x · ResNet-34</span>
+</div>
+<div class="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-white/90 text-[11px] tabular-nums font-medium">
+            Độ phân giải bản đồ: 7 × 7 → 224 × 224 px Bilinear
+          </div>
+</div>
+</div>
+<!-- Quick Context Metatags Below Stage -->
+<div class="grid grid-cols-3 gap-space-sm">
+<div class="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+<div class="font-caption text-caption text-on-surface-variant">Phân loại đích</div>
+<div class="font-label-md text-label-md font-semibold text-on-surface mt-0.5">Độ II (Dày 1 phần)</div>
+</div>
+<div class="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+<div class="font-caption text-caption text-on-surface-variant">Độ tin cậy Softmax</div>
+<div class="font-label-md text-label-md font-semibold text-secondary mt-0.5 tabular-nums">94.8% Certainty</div>
+</div>
+<div class="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant/30">
+<div class="font-caption text-caption text-on-surface-variant">Thời gian suy luận</div>
+<div class="font-label-md text-label-md font-semibold text-on-surface mt-0.5 tabular-nums">18.4 ms (TensorRT)</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN (40% -> 5 Cols in 12-col grid): Inset Cards & Inspector -->
+<div class="lg:col-span-5 flex flex-col gap-space-md">
+<!-- 1. Apple Inset-Grouped Control Panel -->
+<div class="bg-surface-container-lowest rounded-2xl border border-outline-variant/40 shadow-xs overflow-hidden">
+<!-- Section Header -->
+<div class="px-4 pt-3.5 pb-2 border-b border-surface-container-high/60 flex items-center justify-between">
+<span class="font-caption text-caption font-semibold uppercase tracking-wider text-on-surface-variant">Tuỳ chỉnh trực quan</span>
+<span class="font-caption text-caption text-outline">Tham số hiển thị</span>
+</div>
+<!-- Row 1: Toggle Switch -->
+<div class="px-4 py-3 flex items-center justify-between border-b border-surface-container-high/60 hover:bg-surface-container-low/40 transition-colors">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed/50 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">local_fire_department</span>
+</div>
+<div>
+<div class="font-body-md text-body-md font-medium text-on-surface">Hiện bản đồ nhiệt</div>
+<div class="font-caption text-caption text-on-surface-variant">Kích hoạt Grad-CAM overlay</div>
+</div>
+</div>
+<!-- iOS Green Toggle Switch in ON state -->
+<button aria-checked="true" class="relative inline-flex h-[28px] w-[48px] shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none bg-[#34C759]" id="toggle-heatmap-switch" role="switch" type="button">
+<span class="pointer-events-none inline-block h-[24px] w-[24px] transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out translate-x-5" id="toggle-heatmap-thumb"></span>
+</button>
+</div>
+<!-- Row 2: Opacity Slider -->
+<div class="px-4 py-3.5 flex flex-col gap-2 border-b border-surface-container-high/60">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px] text-outline">opacity</span>
+<span class="font-body-md text-body-md text-on-surface">Độ trong suốt (Opacity)</span>
+</div>
+<span class="font-label-md text-label-md font-semibold text-primary tabular-nums" id="opacity-val-label">60%</span>
+</div>
+<!-- Apple HIG-style Slider Track -->
+<div class="relative flex items-center w-full py-1">
+<input class="w-full h-1.5 bg-surface-container-highest rounded-lg appearance-none cursor-pointer accent-primary" id="opacity-slider" max="100" min="0" type="range" value="60"/>
+</div>
+</div>
+<!-- Row 3: Technical Layer Specification -->
+<div class="px-4 py-2.5 bg-surface-container-low/50 flex items-center justify-between text-on-surface-variant">
+<span class="font-caption text-caption">Lớp nơ-ron trích xuất:</span>
+<code class="font-caption text-[11px] font-semibold text-on-surface bg-surface-container-highest/80 px-2 py-0.5 rounded">layer4.2.conv2</code>
+</div>
+</div>
+<!-- 2. Main Clinical Explanation Card -->
+<div class="bg-surface-container-lowest rounded-2xl p-5 border border-outline-variant/40 shadow-xs flex flex-col gap-4">
+<!-- Card Header -->
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-xl bg-primary-fixed text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">filter_center_focus</span>
+</div>
+<div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Mô hình nhìn vào đâu?</h2>
+<span class="font-caption text-caption text-on-surface-variant">Giải thích tính minh bạch thuật toán</span>
+</div>
+</div>
+<span class="font-caption text-caption px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-medium">Độ khớp cao</span>
+</div>
+<!-- Primary Clinical Inference Text -->
+<p class="font-body-md text-body-md text-on-surface leading-relaxed">
+          Mô hình tập trung <strong class="font-semibold text-primary">88% chú ý</strong> vào vùng bọng nước vỡ và đáy vết thương xung huyết ở trung tâm cẳng tay.
+        </p>
+<!-- Breakdown Progress Bars -->
+<div class="flex flex-col gap-3 pt-1">
+<!-- Item 1 -->
+<div>
+<div class="flex justify-between items-center mb-1">
+<span class="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#FF3B30]"></span>
+                Vùng bọng nước & dịch rỉ
+              </span>
+<span class="font-label-sm text-label-sm font-semibold text-on-surface tabular-nums">54% trọng số</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full rounded-full bg-[#FF3B30]" style="width: 54%"></div>
+</div>
+</div>
+<!-- Item 2 -->
+<div>
+<div class="flex justify-between items-center mb-1">
+<span class="font-body-sm text-body-sm font-medium text-on-surface flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-[#FF9500]"></span>
+                Đáy vết thương xung huyết
+              </span>
+<span class="font-label-sm text-label-sm font-semibold text-on-surface tabular-nums">34% trọng số</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full rounded-full bg-[#FF9500]" style="width: 34%"></div>
+</div>
+</div>
+<!-- Item 3 -->
+<div>
+<div class="flex justify-between items-center mb-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-outline-variant"></span>
+                Vùng da lành lân cận
+              </span>
+<span class="font-label-sm text-label-sm text-outline tabular-nums">12% (ảnh hưởng tối thiểu)</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-highest overflow-hidden">
+<div class="h-full rounded-full bg-outline-variant" style="width: 12%"></div>
+</div>
+</div>
+</div>
+<!-- Clinician takeaway tag -->
+<div class="p-3 rounded-xl bg-surface-container-low border border-surface-container-high flex items-center gap-2.5">
+<span class="material-symbols-outlined text-[20px] text-secondary">verified</span>
+<span class="font-label-sm text-label-sm text-on-surface">
+            Phù hợp với đặc điểm lâm sàng của <strong>bỏng độ 2 nông/sâu</strong>.
+          </span>
+</div>
+</div>
+<!-- 3. Clinical Safety & Caution Callout (Solid tinted surface, Apple HIG style) -->
+<div class="rounded-xl p-4 bg-[#FFF8E6] border border-[#FFE082] flex items-start gap-3 shadow-xs">
+<span class="material-symbols-outlined text-[20px] text-[#B76E00] shrink-0 mt-0.5">warning</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm font-semibold text-[#663C00]">Khuyến cáo an toàn lâm sàng</span>
+<p class="font-body-sm text-body-sm text-[#7A4B00] leading-normal">
+            Bản đồ nhiệt giúp bác sĩ kiểm tra mô hình có dựa vào đúng vùng tổn thương hay không. Đây là công cụ hỗ trợ thị giác, không thay thế việc đánh giá cảm giác đau và tưới máu vi mạch thực tế.
+          </p>
+</div>
+</div>
+<!-- 4. Quick Navigation Actions -->
+<div class="flex flex-col gap-2 pt-2">
+<button class="w-full h-11 rounded-xl bg-primary hover:bg-primary/95 active:scale-[0.99] text-on-primary font-label-md text-label-md flex items-center justify-center gap-2 shadow-sm transition-all" type="button">
+<span>Tiếp tục: Bù dịch Parkland</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+<button class="w-full h-10 rounded-xl bg-surface-container hover:bg-surface-container-high active:scale-[0.99] text-primary font-label-md text-label-md flex items-center justify-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+<span>Quay lại phân loại độ sâu</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Client-side Script for Grad-CAM Controls -->
+<script>
+  (function() {
+    const heatmap = document.getElementById('gradcam-heatmap');
+    const img = document.getElementById('clinical-image');
+    const slider = document.getElementById('opacity-slider');
+    const opacityLabel = document.getElementById('opacity-val-label');
+    const toggleSwitch = document.getElementById('toggle-heatmap-switch');
+    const toggleThumb = document.getElementById('toggle-heatmap-thumb');
+
+    const btnOrig = document.getElementById('view-mode-orig');
+    const btnHeat = document.getElementById('view-mode-heat');
+    const btnOverlay = document.getElementById('view-mode-overlay');
+    const viewButtons = [btnOrig, btnHeat, btnOverlay];
+
+    let isEnabled = true;
+
+    function setViewActive(activeBtn) {
+      viewButtons.forEach(btn => {
+        btn.classList.remove('active-view', 'bg-white', 'text-black', 'font-semibold');
+        btn.classList.add('text-white/70');
+      });
+      activeBtn.classList.remove('text-white/70');
+      activeBtn.classList.add('active-view', 'bg-white', 'text-black', 'font-semibold');
+    }
+
+    if (slider && heatmap && opacityLabel) {
+      slider.addEventListener('input', function(e) {
+        const val = e.target.value;
+        opacityLabel.textContent = val + '%';
+        if (isEnabled) {
+          heatmap.style.opacity = (val / 100).toString();
+        }
+      });
+    }
+
+    if (toggleSwitch && toggleThumb && heatmap) {
+      toggleSwitch.addEventListener('click', function() {
+        isEnabled = !isEnabled;
+        toggleSwitch.setAttribute('aria-checked', isEnabled.toString());
+        if (isEnabled) {
+          toggleSwitch.classList.remove('bg-surface-container-highest');
+          toggleSwitch.classList.add('bg-[#34C759]');
+          toggleThumb.classList.add('translate-x-5');
+          toggleThumb.classList.remove('translate-x-0.5');
+          const val = slider ? slider.value : 60;
+          heatmap.style.opacity = (val / 100).toString();
+        } else {
+          toggleSwitch.classList.remove('bg-[#34C759]');
+          toggleSwitch.classList.add('bg-surface-container-highest');
+          toggleThumb.classList.remove('translate-x-5');
+          toggleThumb.classList.add('translate-x-0.5');
+          heatmap.style.opacity = '0';
+        }
+      });
+    }
+
+    if (btnOrig && img && heatmap) {
+      btnOrig.addEventListener('click', function() {
+        setViewActive(btnOrig);
+        heatmap.style.opacity = '0';
+        img.style.opacity = '1';
+      });
+    }
+
+    if (btnHeat && img && heatmap) {
+      btnHeat.addEventListener('click', function() {
+        setViewActive(btnHeat);
+        img.style.opacity = '0.15';
+        heatmap.style.opacity = '1';
+        heatmap.style.mixBlendMode = 'normal';
+      });
+    }
+
+    if (btnOverlay && img && heatmap) {
+      btnOverlay.addEventListener('click', function() {
+        setViewActive(btnOverlay);
+        img.style.opacity = '1';
+        heatmap.style.mixBlendMode = 'screen';
+        const val = slider ? slider.value : 60;
+        heatmap.style.opacity = isEnabled ? (val / 100).toString() : '0';
+      });
+    }
+  })();
+</script>
+</main>
+<!-- BOTTOM FROSTED GLASS BAR -->
+<footer class="fixed bottom-0 left-0 right-0 z-50 glass-bottom h-12">
+<div class="max-w-7xl mx-auto h-full px-margin flex items-center justify-between">
+<div class="font-caption text-caption text-on-surface-variant leading-none flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-outline">info</span>
+<span>Công cụ hỗ trợ tham khảo lâm sàng, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.</span>
+</div>
+<div class="font-caption text-caption text-outline tabular-nums">
+      ResNet50 / Grad-CAM+ | v2.4
+    </div>
+</div>
+</footer>
+</body></html>

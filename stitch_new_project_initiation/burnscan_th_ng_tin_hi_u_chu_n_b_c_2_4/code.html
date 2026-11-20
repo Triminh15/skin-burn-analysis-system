@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - Tải ảnh vết bỏng</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+    :root {
+      --app-bg: #F2F2F7;
+      --surface: #FFFFFF;
+      --text-primary: #000000;
+      --text-secondary: rgba(60, 60, 67, 0.60);
+      --text-tertiary: rgba(60, 60, 67, 0.30);
+      --separator: rgba(60, 60, 67, 0.29);
+      --control-fill: rgba(120, 120, 128, 0.12);
+      --accent: #007AFF;
+      --accent-tint: rgba(0, 122, 255, 0.12);
+      --grade-ok: #248A3D;
+      --grade-ok-tint: rgba(52, 199, 89, 0.12);
+      --grade-error: #D70015;
+      --grade-error-tint: rgba(255, 59, 48, 0.12);
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+      background-color: var(--app-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Apple Frosted Glass */
+    .glass-light {
+      background: rgba(249, 249, 249, 0.75);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 0.5px solid var(--separator);
+    }
+
+    .glass-bottom {
+      background: rgba(249, 249, 249, 0.78);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .dark-glass-toolbar {
+      background: rgba(28, 28, 30, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+    }
+
+    /* Apple segmented control */
+    .segmented-control {
+      background: rgba(120, 120, 128, 0.14);
+      border-radius: 8px;
+      padding: 2px;
+      display: inline-flex;
+    }
+
+    .segmented-btn {
+      padding: 4px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .segmented-btn.active {
+      background: #FFFFFF;
+      color: #000000;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 0.5px rgba(0, 0, 0, 0.04);
+      font-weight: 600;
+    }
+
+    /* Inset grouped list */
+    .inset-grouped {
+      background: #FFFFFF;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0.5px 1px rgba(0,0,0,0.04);
+    }
+
+    .inset-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .inset-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 52px;
+      right: 0;
+      height: 0.5px;
+      background: var(--separator);
+    }
+
+    .inset-item-dense:not(:last-child)::after {
+      left: 16px;
+    }
+
+    .dropzone-dashed {
+      border: 1.5px dashed #C7C7CC;
+      transition: all 0.2s ease;
+    }
+    .dropzone-dashed:hover {
+      border-color: #007AFF;
+      background-color: rgba(0, 122, 255, 0.02);
+    }
+  </style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/></head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900">
+<!-- TOP TOOLBAR (Apple macOS / iPadOS HIG Light Glass, 52px) -->
+<header class="sticky top-0 z-50 glass-light h-[52px] px-6 flex items-center justify-between">
+<!-- Left: Abstract Brand Logo + Wordmark -->
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-[8px] bg-[#007AFF] flex items-center justify-center text-white shadow-sm">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<path d="M12 2c0 4-5 6-5 10a5 5 0 0 0 10 0c0-4-5-6-5-10z"></path>
+<path d="M12 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"></path>
+</svg>
+</div>
+<div class="flex items-baseline gap-1.5">
+<span class="text-[17px] font-bold tracking-tight text-black">BurnScan</span>
+<span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-[#007AFF] border border-blue-200/50">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Control -->
+<div class="segmented-control">
+<button class="segmented-btn active" id="tab-patient">Bệnh nhân</button>
+<button class="segmented-btn" id="tab-doctor">Bác sĩ</button>
+</div>
+<!-- Right: Model Readiness & Status -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-[rgba(60,60,67,0.12)] shadow-xs">
+<span class="w-2 h-2 rounded-full bg-[#248A3D] animate-pulse"></span>
+<span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">Mô hình sẵn sàng</span>
+</div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT -->
+<main class="flex-1 w-full max-w-[840px] mx-auto px-6 py-8"><div class="flex flex-col w-full pb-12">
+<!-- PAGE HEADER & BREADCRUMB LEVEL -->
+<div class="flex flex-col gap-2 mb-6">
+<div class="flex items-center justify-between flex-wrap gap-4">
+<div>
+<h1 class="font-headline-xl text-headline-xl text-on-surface tracking-tight">Thông tin &amp; hiệu chuẩn</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Hiệu chuẩn tỉ lệ đo lường bằng thước tham chiếu và bổ sung thông tin lâm sàng của bệnh nhân.</p>
+</div>
+<!-- STATE DEMO CONTROLLER (Apple Segmented Control) -->
+<div class="flex items-center gap-2 bg-surface-container-high p-1 rounded-xl">
+<span class="font-label-sm text-label-sm text-on-surface-variant pl-2 pr-1">Chế độ xem:</span>
+<div class="inline-flex rounded-lg bg-surface-variant p-0.5">
+<button class="font-label-sm text-label-sm px-3 py-1.5 rounded-md bg-surface-container-lowest text-on-surface shadow-xs transition-all font-semibold" id="btn-state-valid" onclick="setViewState('valid')">
+            Trạng thái chuẩn
+          </button>
+<button class="font-label-sm text-label-sm px-3 py-1.5 rounded-md text-on-surface-variant hover:text-on-surface transition-all font-medium" id="btn-state-error" onclick="setViewState('error')">
+            Lỗi kiểm tra (Thiếu cân nặng)
+          </button>
+</div>
+</div>
+</div>
+<!-- 4-STEP PROGRESSION PIPELINE -->
+<div class="grid grid-cols-4 gap-2 mt-4 bg-surface-container-low p-2 rounded-xl">
+<!-- Step 1: Completed -->
+<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-surface-container-lowest shadow-xs">
+<div class="w-6 h-6 rounded-full bg-secondary-fixed flex items-center justify-center text-on-secondary-fixed">
+<span class="material-symbols-outlined text-[16px]">check</span>
+</div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface truncate">1. Tải ảnh</span>
+<span class="block font-caption text-caption text-secondary">Đã hoàn thành</span>
+</div>
+</div>
+<!-- Step 2: Active Step -->
+<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-primary-container text-on-primary-container shadow-sm">
+<div class="w-6 h-6 rounded-full bg-surface-container-lowest text-primary font-bold flex items-center justify-center text-[13px]">
+          2
+        </div>
+<div class="min-w-0">
+<span class="block font-label-md text-label-md truncate">Thông tin &amp; hiệu chuẩn</span>
+<span class="block font-caption text-caption text-primary-fixed-dim">Bước hiện tại</span>
+</div>
+</div>
+<!-- Step 3: Upcoming -->
+<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">
+          3
+        </div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface truncate">3. Phân tích</span>
+<span class="block font-caption text-caption text-on-surface-variant">Chờ thông tin</span>
+</div>
+</div>
+<!-- Step 4: Upcoming -->
+<div class="flex items-center gap-2.5 px-3 py-2 rounded-lg opacity-60">
+<div class="w-6 h-6 rounded-full bg-surface-variant text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">
+          4
+        </div>
+<div class="min-w-0">
+<span class="block font-label-sm text-label-sm text-on-surface truncate">4. Kết quả</span>
+<span class="block font-caption text-caption text-on-surface-variant">Độ sâu &amp; Dịch truyền</span>
+</div>
+</div>
+</div>
+</div>
+<!-- WORKSPACE SPLIT: 60% Left Stage, 40% Right Form -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+<!-- LEFT COLUMN: MEDICAL VIEWPORT & CALIBRATION STAGE (60% -> 7 cols) -->
+<div class="lg:col-span-7 flex flex-col gap-4">
+<!-- PHOTO VIEWER CONTAINER -->
+<div class="relative w-full h-[460px] bg-inverse-surface rounded-2xl overflow-hidden shadow-md flex items-center justify-center select-none group">
+<!-- Synthetic Visual Canvas: Medical wound with physical scale card -->
+<div class="absolute inset-0 bg-cover bg-center" data-alt="High-resolution clinical emergency department photograph of an adult human forearm with thermal partial-thickness burn injury, visible erythematous tissue and blister formation. Next to the arm sits a standardized physical medical calibration scale card with millimeter graduations under crisp neutral emergency lighting, macro medical dermatology photography." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuApk9rLfOnz3MZHzpyKfAgXwBzqe2or8yIvMFs_AdOWEUDWZjKhPWwtJrLDDPUJT_JhkX71ea4wR230QcQzljt2NPZuzoKxtqw6mMD3KofST9fyVCXrNI_v2h02kMQrhlXEeyYP60C-pJ8z58tbpjXXTx07ec0E1TGM8VkVF3Jnp2XgcVSn59o_wU9lK7AEWjPl9oEYi6S7gqmNM3PHv7R3L9Ug06J8CUbBkh_SYkIs')">
+</div>
+<!-- Vignette & depth scrim -->
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30 pointer-events-none"></div>
+<!-- FLOATING DARK-GLASS TOOLBAR (Apple HUD HIG) -->
+<div class="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
+<div class="flex items-center gap-1.5 p-1 rounded-xl bg-[rgba(28,28,30,0.72)] backdrop-blur-[20px] shadow-sm">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container-lowest/20 text-white font-label-sm text-label-sm transition-all hover:bg-surface-container-lowest/30">
+<span class="material-symbols-outlined text-[18px]">straighten</span>
+<span>Vẽ đoạn thước</span>
+</button>
+<button class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 font-label-sm text-label-sm transition-all">
+<span class="material-symbols-outlined text-[18px]">undo</span>
+<span>Hoàn tác</span>
+</button>
+<button class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white/80 hover:text-white hover:bg-white/10 font-label-sm text-label-sm transition-all">
+<span class="material-symbols-outlined text-[18px]">zoom_in</span>
+<span>Phóng to</span>
+</button>
+</div>
+<!-- Secondary Quick HUD Indicator -->
+<div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(28,28,30,0.72)] backdrop-blur-[20px] text-white/90 font-caption text-caption shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed animate-pulse"></span>
+<span>Độ phân giải 2048 × 1536</span>
+</div>
+</div>
+<!-- CALIBRATION OVERLAY (Crisp Yellow HIG Measurement Line) -->
+<div class="absolute inset-0 pointer-events-none z-10">
+<svg class="w-full h-full">
+<!-- Reference Yellow Measurement Line -->
+<line stroke="#FFD60A" stroke-dasharray="0" stroke-linecap="round" stroke-width="2.5" x1="180" x2="495" y1="365" y2="365"></line>
+<!-- Tick ends for clinical caliper feeling -->
+<line stroke="#FFD60A" stroke-width="2" x1="180" x2="180" y1="353" y2="377"></line>
+<line stroke="#FFD60A" stroke-width="2" x1="495" x2="495" y1="353" y2="377"></line>
+</svg>
+<!-- Yellow Knob 1 (Start Handle) -->
+<div class="absolute left-[180px] top-[365px] -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#FFD60A] shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:scale-110 transition-transform">
+<div class="w-2 h-2 rounded-full bg-surface-container-lowest"></div>
+</div>
+<!-- Yellow Knob 2 (End Handle) -->
+<div class="absolute left-[495px] top-[365px] -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#FFD60A] shadow-md flex items-center justify-center cursor-grab active:cursor-grabbing pointer-events-auto hover:scale-110 transition-transform">
+<div class="w-2 h-2 rounded-full bg-surface-container-lowest"></div>
+</div>
+<!-- Center Measurement HUD Badge -->
+<div class="absolute left-[337px] top-[340px] -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-full bg-[rgba(28,28,30,0.85)] backdrop-blur-md text-white font-label-sm text-label-sm tabular-nums shadow-sm flex items-center gap-1 pointer-events-auto">
+<span class="material-symbols-outlined text-[14px] text-[#FFD60A]">photo_size_select_small</span>
+<span class="font-semibold tracking-wide">412 px</span>
+</div>
+<!-- Floating Guidance Badge at Bottom -->
+<div class="absolute bottom-4 left-4 right-4 flex justify-between items-center text-white/90 font-caption text-caption">
+<span class="px-2.5 py-1 rounded-md bg-black/50 backdrop-blur-md">Kéo hai mút vàng vào hai đầu vật chuẩn (thẻ CCCD / thước)</span>
+<span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md font-mono">100% Zoom</span>
+</div>
+</div>
+</div>
+<!-- INSET-GROUPED CALIBRATION METRICS LIST -->
+<div class="bg-surface-container-lowest rounded-xl p-0 shadow-xs overflow-hidden">
+<!-- Row 1: Real dimension input -->
+<div class="flex items-center justify-between min-h-[52px] px-4 py-2 bg-surface-container-lowest">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">aspect_ratio</span>
+<label class="font-body-md text-body-md text-on-surface" for="input-dimension">Chiều dài thực tế của đoạn vừa vẽ</label>
+</div>
+<div class="flex items-center gap-1.5">
+<input class="w-20 h-9 px-3 rounded-lg bg-surface-container-high text-right font-headline-md text-headline-md text-on-surface tabular-nums focus:outline-none focus:bg-surface-variant transition-colors" id="input-dimension" type="text" value="8,56"/>
+<span class="font-label-md text-label-md text-on-surface-variant">cm</span>
+</div>
+</div>
+<div class="h-[0.5px] ml-11 bg-surface-variant"></div>
+<!-- Row 2: Derived calibration ratio -->
+<div class="flex items-center justify-between min-h-[52px] px-4 py-2 bg-surface-container-lowest">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">calculate</span>
+<span class="font-body-md text-body-md text-on-surface">Tỉ lệ hiệu chuẩn</span>
+</div>
+<div class="flex items-center gap-2.5">
+<span class="font-headline-md text-headline-md text-on-surface tabular-nums">48,1 px/cm</span>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-caption text-caption flex items-center gap-1">
+<span class="material-symbols-outlined text-[13px]">lock</span>
+              Đã khóa tỉ lệ
+            </span>
+</div>
+</div>
+</div>
+<!-- Informational helper footnote -->
+<div class="flex items-center gap-1.5 px-2 text-on-surface-variant font-caption text-caption">
+<span class="material-symbols-outlined text-[16px] text-primary">info</span>
+<span>Ví dụ: Cạnh dài thẻ căn cước công dân (CCCD) tiêu chuẩn là 8,56 cm.</span>
+</div>
+</div>
+<!-- RIGHT COLUMN: CLINICAL PATIENT & TBSA ANATOMICAL PROFILE (40% -> 5 cols) -->
+<div class="lg:col-span-5 flex flex-col gap-6">
+<!-- SECTION 1: ANATOMICAL BURN REGION (RULE OF NINES) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between px-1">
+<span class="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">VÙNG BỊ BỎNG (QUY TẮC SỐ 9)</span>
+<span class="font-label-sm text-label-sm text-primary font-medium">Quy tắc Wallace</span>
+</div>
+<!-- Body Figure & Selector Container -->
+<div class="bg-surface-container-lowest rounded-xl p-4 shadow-xs flex flex-col gap-4">
+<!-- ANATOMICAL BODY SILHOUETTES (Front & Back Minimalist Line Art) -->
+<div class="w-full bg-surface-container-low rounded-lg p-3 flex items-center justify-around relative">
+<!-- Front Silhouette -->
+<div class="flex flex-col items-center">
+<span class="font-caption text-caption text-on-surface-variant mb-1 font-medium">Mặt trước</span>
+<svg class="w-28 h-40" fill="none" stroke="currentColor" viewbox="0 0 100 150">
+<!-- Head (4.5% front) -->
+<ellipse class="text-outline" cx="50" cy="18" rx="10" ry="12" stroke-width="1.2"></ellipse>
+<!-- Torso (18% chest & abdomen) -->
+<path class="text-outline" d="M38 32 C42 30, 58 30, 62 32 L64 74 C58 76, 42 76, 36 74 Z" stroke-width="1.2"></path>
+<!-- Right Arm (4.5% front) -->
+<path class="text-outline" d="M37 34 L26 70 L23 88 L18 87 L22 68 L33 34" stroke-width="1.2"></path>
+<!-- Left Arm - SELECTED INJURY REGION (Highlighted in iOS Blue with 20% Fill) -->
+<path d="M63 34 L74 70 L77 88 L82 87 L78 68 L67 34 Z" fill="rgba(0,122,255,0.22)" stroke="#007AFF" stroke-width="1.8"></path>
+<!-- Groin / Genitals (1%) -->
+<path class="text-outline" d="M46 75 L54 75 L50 82 Z" stroke-width="1.2"></path>
+<!-- Right Leg (9% front) -->
+<path class="text-outline" d="M36 76 L40 115 L38 142 L46 142 L48 115 L48 78" stroke-width="1.2"></path>
+<!-- Left Leg (9% front) -->
+<path class="text-outline" d="M64 76 L60 115 L62 142 L54 142 L52 115 L52 78" stroke-width="1.2"></path>
+</svg>
+</div>
+<!-- Back Silhouette -->
+<div class="flex flex-col items-center">
+<span class="font-caption text-caption text-on-surface-variant mb-1 font-medium">Mặt sau</span>
+<svg class="w-28 h-40" fill="none" stroke="currentColor" viewbox="0 0 100 150">
+<!-- Head back -->
+<ellipse class="text-outline" cx="50" cy="18" rx="10" ry="12" stroke-width="1.2"></ellipse>
+<!-- Back & Buttocks (18%) -->
+<path class="text-outline" d="M38 32 C42 30, 58 30, 62 32 L64 74 C58 76, 42 76, 36 74 Z" stroke-width="1.2"></path>
+<!-- Left Arm Back (4.5%) -->
+<path class="text-outline" d="M37 34 L26 70 L23 88 L18 87 L22 68 L33 34" stroke-width="1.2"></path>
+<!-- Right Arm Back - Highlighted in sync -->
+<path d="M63 34 L74 70 L77 88 L82 87 L78 68 L67 34 Z" fill="rgba(0,122,255,0.22)" stroke="#007AFF" stroke-width="1.8"></path>
+<!-- Legs Back -->
+<path class="text-outline" d="M36 76 L40 115 L38 142 L46 142 L48 115 L48 78" stroke-width="1.2"></path>
+<path class="text-outline" d="M64 76 L60 115 L62 142 L54 142 L52 115 L52 78" stroke-width="1.2"></path>
+</svg>
+</div>
+<!-- Total TBSA Floating Pill inside Diagram -->
+<div class="absolute bottom-2 right-2 px-2.5 py-1 rounded-md bg-surface-container-lowest/90 backdrop-blur-sm shadow-xs flex items-center gap-1.5 font-label-sm text-label-sm text-on-surface">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-on-surface-variant">TBSA:</span>
+<span class="font-bold tabular-nums text-primary">9%</span>
+</div>
+</div>
+<!-- Inset Row: Selected region selector -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between px-2 py-1.5 rounded-lg bg-surface-container-low">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[18px]">check_circle</span>
+<span class="font-label-sm text-label-sm text-on-surface font-semibold">Cánh tay trái (Toàn bộ)</span>
+</div>
+<span class="font-headline-md text-headline-md text-primary font-bold tabular-nums">9%</span>
+</div>
+<!-- Fast Rule of Nines Picker -->
+<div class="grid grid-cols-2 gap-1.5 pt-1">
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container text-left font-caption text-caption text-on-surface hover:bg-surface-variant transition-colors">
+<span>Đầu – Mặt – Cổ</span>
+<span class="text-on-surface-variant font-medium">9%</span>
+</button>
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-primary text-on-primary text-left font-caption text-caption shadow-xs">
+<span>Cánh tay trái</span>
+<span class="font-bold">9% ✓</span>
+</button>
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container text-left font-caption text-caption text-on-surface hover:bg-surface-variant transition-colors">
+<span>Cánh tay phải</span>
+<span class="text-on-surface-variant font-medium">9%</span>
+</button>
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container text-left font-caption text-caption text-on-surface hover:bg-surface-variant transition-colors">
+<span>Ngực – Bụng</span>
+<span class="text-on-surface-variant font-medium">18%</span>
+</button>
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container text-left font-caption text-caption text-on-surface hover:bg-surface-variant transition-colors">
+<span>Lưng – Mông</span>
+<span class="text-on-surface-variant font-medium">18%</span>
+</button>
+<button class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-surface-container text-left font-caption text-caption text-on-surface hover:bg-surface-variant transition-colors">
+<span>Chân trái / phải</span>
+<span class="text-on-surface-variant font-medium">18% × 2</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- SECTION 2: PATIENT CLINICAL DATA (INSET-GROUPED FORM) -->
+<div class="flex flex-col gap-2">
+<div class="flex items-center justify-between px-1">
+<span class="font-caption text-caption uppercase tracking-wider text-on-surface-variant font-semibold">THÔNG TIN BỆNH NHÂN</span>
+<span class="font-caption text-caption text-on-surface-variant">Dành cho cấp cứu</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<!-- Row 1: Age -->
+<div class="flex items-center justify-between min-h-[48px] px-4 py-1.5 bg-surface-container-lowest">
+<span class="font-body-md text-body-md text-on-surface">Tuổi bệnh nhân</span>
+<div class="flex items-center gap-1.5">
+<input class="w-16 h-8 px-2 rounded-lg bg-surface-container text-right font-headline-md text-headline-md text-on-surface tabular-nums focus:outline-none" type="number" value="34"/>
+<span class="font-label-sm text-label-sm text-on-surface-variant">tuổi</span>
+</div>
+</div>
+<div class="h-[0.5px] ml-4 bg-surface-variant"></div>
+<!-- Row 2: Gender (Apple Segmented Control) -->
+<div class="flex items-center justify-between min-h-[48px] px-4 py-1.5 bg-surface-container-lowest">
+<span class="font-body-md text-body-md text-on-surface">Giới tính</span>
+<div class="inline-flex rounded-lg bg-surface-variant p-0.5">
+<button class="font-label-sm text-label-sm px-3 py-1 rounded-md bg-surface-container-lowest text-on-surface font-semibold shadow-xs">Nam</button>
+<button class="font-label-sm text-label-sm px-3 py-1 rounded-md text-on-surface-variant hover:text-on-surface">Nữ</button>
+</div>
+</div>
+<div class="h-[0.5px] ml-4 bg-surface-variant"></div>
+<!-- Row 3: Weight (Dynamic Standard vs. Validation Error State) -->
+<div class="flex items-center justify-between min-h-[48px] px-4 py-1.5 bg-surface-container-lowest transition-colors" id="row-weight-container">
+<div class="flex items-center gap-2">
+<span class="font-body-md text-body-md text-on-surface" id="weight-label">Cân nặng (kg)</span>
+<span class="material-symbols-outlined text-[18px] text-error hidden" id="weight-error-icon">error</span>
+</div>
+<div class="flex items-center gap-1.5">
+<input class="w-20 h-8 px-2 rounded-lg bg-surface-container text-right font-headline-md text-headline-md text-on-surface tabular-nums focus:outline-none transition-all" id="input-weight" type="text" value="68"/>
+<span class="font-label-sm text-label-sm text-on-surface-variant">kg</span>
+</div>
+</div>
+<div class="h-[0.5px] ml-4 bg-surface-variant"></div>
+<!-- Row 4: Elapsed Time since injury -->
+<div class="flex items-center justify-between min-h-[48px] px-4 py-1.5 bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface">Thời gian từ lúc bị bỏng</span>
+<span class="font-caption text-caption text-on-surface-variant">Tính mốc 8 giờ đầu bù dịch</span>
+</div>
+<div class="flex items-center gap-1.5">
+<input class="w-16 h-8 px-2 rounded-lg bg-surface-container text-right font-headline-md text-headline-md text-on-surface tabular-nums focus:outline-none" type="text" value="2,5"/>
+<span class="font-label-sm text-label-sm text-on-surface-variant">giờ trước</span>
+</div>
+</div>
+</div>
+<!-- DYNAMIC HELPER / ERROR BANNER FOR WEIGHT -->
+<div class="flex items-start gap-2 px-2 py-1 text-on-surface-variant font-caption text-caption" id="weight-help-valid">
+<span class="material-symbols-outlined text-[16px] text-primary mt-0.5">calculate</span>
+<span>Cần để tính lượng dịch truyền (Công thức Parkland: 4ml × kg × %TBSA).</span>
+</div>
+<div class="hidden flex items-start gap-2 p-3 rounded-xl bg-error-container text-on-error-container font-caption text-caption" id="weight-help-error">
+<span class="material-symbols-outlined text-[18px] text-error mt-0.5 shrink-0">warning</span>
+<div class="flex flex-col gap-0.5">
+<span class="font-label-sm text-label-sm font-semibold text-error">Yêu cầu nhập cân nặng</span>
+<span>Vui lòng nhập cân nặng của bệnh nhân để tự động tính thể tích bù dịch truyền Parkland trong 24 giờ đầu.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- CLINICAL BOTTOM DOCKED ACTION BAR (Sticky Frosted HIG Panel) -->
+<div class="mt-8 pt-4 pb-2 border-t border-surface-variant/40 flex items-center justify-between flex-wrap gap-4">
+<div class="flex items-center gap-2 text-on-surface-variant font-caption text-caption">
+<span class="material-symbols-outlined text-[16px] text-primary">verified_user</span>
+<span>Hệ số hiệu chuẩn đã gắn liền với metadata ảnh. Sẵn sàng phân tích mạng nơ-ron sâu.</span>
+</div>
+<div class="flex items-center gap-3">
+<!-- Back button -->
+<button class="h-10 px-4 rounded-lg bg-surface-container-high text-primary hover:bg-surface-variant active:scale-95 font-label-md text-label-md transition-all flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[18px]">arrow_back_ios</span>
+<span>Quay lại</span>
+</button>
+<!-- Primary Action CTA -->
+<button class="h-10 px-6 rounded-lg bg-primary text-on-primary hover:bg-primary-container active:scale-95 shadow-xs font-label-md text-label-md transition-all flex items-center gap-2" id="btn-submit-action" onclick="handleAnalysisSubmit()">
+<span>Tiến hành phân tích</span>
+<span class="material-symbols-outlined text-[18px]">auto_awesome</span>
+</button>
+</div>
+</div>
+</div>
+<!-- CLIENT JAVASCRIPT: Dynamic HIG State Switcher (Valid vs Error) -->
+<script>
+  function setViewState(state) {
+    const btnValid = document.getElementById('btn-state-valid');
+    const btnError = document.getElementById('btn-state-error');
+    const rowWeight = document.getElementById('row-weight-container');
+    const inputWeight = document.getElementById('input-weight');
+    const weightLabel = document.getElementById('weight-label');
+    const weightIcon = document.getElementById('weight-error-icon');
+    const helpValid = document.getElementById('weight-help-valid');
+    const helpError = document.getElementById('weight-help-error');
+    const btnSubmit = document.getElementById('btn-submit-action');
+
+    if (state === 'valid') {
+      // Toggle button styles
+      btnValid.className = "font-label-sm text-label-sm px-3 py-1.5 rounded-md bg-surface-container-lowest text-on-surface shadow-xs transition-all font-semibold";
+      btnError.className = "font-label-sm text-label-sm px-3 py-1.5 rounded-md text-on-surface-variant hover:text-on-surface transition-all font-medium";
+
+      // Form styling for Valid State
+      rowWeight.classList.remove('bg-error-container/30');
+      inputWeight.value = "68";
+      inputWeight.classList.remove('bg-error-container', 'text-error', 'font-bold');
+      inputWeight.classList.add('bg-surface-container', 'text-on-surface');
+      weightLabel.classList.remove('text-error', 'font-semibold');
+      weightIcon.classList.add('hidden');
+      helpValid.classList.remove('hidden');
+      helpError.classList.add('hidden');
+
+      // Primary submit active
+      btnSubmit.classList.remove('opacity-50', 'pointer-events-none');
+    } else {
+      // Toggle button styles
+      btnError.className = "font-label-sm text-label-sm px-3 py-1.5 rounded-md bg-surface-container-lowest text-error shadow-xs transition-all font-semibold";
+      btnValid.className = "font-label-sm text-label-sm px-3 py-1.5 rounded-md text-on-surface-variant hover:text-on-surface transition-all font-medium";
+
+      // Form styling for Validation Error State
+      rowWeight.classList.add('bg-error-container/30');
+      inputWeight.value = "";
+      inputWeight.placeholder = "--";
+      inputWeight.classList.remove('bg-surface-container', 'text-on-surface');
+      inputWeight.classList.add('bg-error-container', 'text-error', 'font-bold');
+      weightLabel.classList.add('text-error', 'font-semibold');
+      weightIcon.classList.remove('hidden');
+      helpValid.classList.add('hidden');
+      helpError.classList.remove('hidden');
+
+      // Primary submit inactive or warning
+      btnSubmit.classList.add('opacity-50', 'pointer-events-none');
+    }
+  }
+
+  function handleAnalysisSubmit() {
+    alert("Dữ liệu hiệu chuẩn và lâm sàng hợp lệ. Bắt đầu phân tích phân đoạn tổn thương và độ sâu mô...");
+  }
+</script></main>
+<!-- BOTTOM GLASS ACTION BAR (Fixed for Apple iPadOS/macOS HIG) -->
+<footer class="sticky bottom-0 z-50 glass-bottom px-6 py-3">
+<div class="max-w-[840px] mx-auto flex items-center justify-between">
+<!-- Footer disclaimer required by user spec -->
+<div class="text-[12px] text-[rgba(60,60,67,0.65)] leading-tight hidden md:block">
+        Công cụ hỗ trợ tham khảo, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.
+      </div>
+<!-- Action buttons -->
+<div class="flex items-center gap-3 ml-auto w-full md:w-auto justify-end">
+<!-- Secondary Tinted Button: "Chọn lại" -->
+<button class="h-10 px-5 rounded-[10px] bg-[rgba(0,122,255,0.12)] text-[#007AFF] font-medium text-[15px] hover:bg-[rgba(0,122,255,0.18)] active:scale-[0.98] transition-all flex items-center justify-center min-w-[100px]" onclick="switchView('frame1')">
+          Chọn lại
+        </button>
+<!-- Primary Solid Blue Button: "Tiếp tục" -->
+<button class="h-10 px-6 rounded-[10px] bg-[#007AFF] text-white font-medium text-[15px] hover:bg-[#006ee6] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xs min-w-[120px]" id="btn-continue" onclick="handleContinue()">
+<span>Tiếp tục</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewbox="0 0 24 24">
+<polyline points="9 18 15 12 9 6"></polyline>
+</svg>
+</button>
+</div>
+</div>
+</footer>
+<!-- JAVASCRIPT STATE CONTROLLER (Allows toggling Frame 1, Frame 2, Frame 3 seamlessly) -->
+<script>
+    function switchView(frameId) {
+      const uploadContainer = document.getElementById('upload-panel-container');
+      const previewContainer = document.getElementById('preview-panel-container');
+      const errorBanner = document.getElementById('error-banner');
+      const btnF1 = document.getElementById('btn-f1');
+      const btnF2 = document.getElementById('btn-f2');
+      const btnF3 = document.getElementById('btn-f3');
+      const btnContinue = document.getElementById('btn-continue');
+
+      // Reset button styles
+      [btnF1, btnF2, btnF3].forEach(b => {
+        b.className = "px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all";
+      });
+
+      if (frameId === 'frame1') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.add('hidden');
+        btnF1.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame2') {
+        uploadContainer.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+        errorBanner.classList.add('hidden');
+        btnF2.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.remove('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame3') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.remove('hidden');
+        btnF3.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function dismissError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function handleContinue() {
+      alert("Chuyển sang Bước 2: Thông tin lâm sàng bệnh nhân.");
+    }
+
+    // Interactive file input simulator
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        switchView('frame2');
+      }
+    });
+
+    // Default initialize on Frame 1 (Drop zone view)
+    switchView('frame1');
+  </script>
+</body></html>

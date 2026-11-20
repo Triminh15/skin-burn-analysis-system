@@ -8,11 +8,17 @@ data/processed/*
 knowledge_base/chroma_db/*
 outputs/checkpoints/*
 outputs/figures/*
+outputs/web_uploads/*
+!outputs/web_uploads/.gitkeep
+outputs/reports/*
+!outputs/reports/.gitkeep
 experiments/*
 *.pth
 *.pt
 *.h5
 *.zip
+*.db
+*.sqlite3
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>BurnScan - ER Triage</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+          "surface-container-lowest": "#ffffff",
+          "surface-container-high": "#e8e8ed",
+          "on-tertiary-fixed-variant": "#93000a",
+          "surface-bright": "#f9f9fe",
+          "tertiary": "#bb0011",
+          "on-primary-fixed-variant": "#004493",
+          "secondary": "#006e28",
+          "surface-dim": "#d9dade",
+          "background": "#f9f9fe",
+          "on-primary-container": "#fefcff",
+          "secondary-fixed": "#95f99d",
+          "outline-variant": "#c1c6d7",
+          "surface-container": "#ededf2",
+          "on-primary-fixed": "#001a41",
+          "secondary-fixed-dim": "#79dc84",
+          "primary-container": "#0070eb",
+          "on-error-container": "#93000a",
+          "on-secondary-fixed": "#002107",
+          "secondary-container": "#95f99d",
+          "outline": "#717786",
+          "on-tertiary-container": "#fffbff",
+          "surface-variant": "#e2e2e7",
+          "primary-fixed-dim": "#adc6ff",
+          "error-container": "#ffdad6",
+          "on-secondary": "#ffffff",
+          "tertiary-fixed": "#ffdad6",
+          "surface": "#f9f9fe",
+          "surface-tint": "#005bc1",
+          "on-surface-variant": "#414755",
+          "primary": "#0058bc",
+          "inverse-primary": "#adc6ff",
+          "inverse-surface": "#2e3034",
+          "on-error": "#ffffff",
+          "error": "#ba1a1a",
+          "inverse-on-surface": "#f0f0f5",
+          "surface-container-highest": "#e2e2e7",
+          "on-tertiary-fixed": "#410002",
+          "tertiary-container": "#e6171e",
+          "primary-fixed": "#d8e2ff",
+          "on-primary": "#ffffff",
+          "on-tertiary": "#ffffff",
+          "on-secondary-fixed-variant": "#00531d",
+          "on-surface": "#1a1c1f",
+          "on-secondary-container": "#00752b",
+          "on-background": "#1a1c1f",
+          "surface-container-low": "#f3f3f8",
+          "tertiary-fixed-dim": "#ffb4ab"
+        },
+        "borderRadius": {
+          "DEFAULT": "0.25rem",
+          "lg": "0.5rem",
+          "xl": "0.75rem",
+          "full": "9999px"
+        },
+        "spacing": {
+          "space-sm": "0.5rem",
+          "space-xl": "1.5rem",
+          "margin": "1.5rem",
+          "space-lg": "1rem",
+          "space-xs": "0.25rem",
+          "gutter": "1rem",
+          "space-md": "0.75rem"
+        },
+        "fontFamily": {
+          "headline-md": ["Inter"],
+          "headline-xl": ["Inter"],
+          "body-md": ["Inter"],
+          "body-lg": ["Inter"],
+          "headline-lg": ["Inter"],
+          "label-sm": ["Inter"],
+          "caption": ["Inter"],
+          "body-sm": ["Inter"],
+          "label-md": ["Inter"]
+        },
+        "fontSize": {
+          "headline-md": ["17px", {"lineHeight": "22px", "fontWeight": "600"}],
+          "headline-xl": ["32px", {"lineHeight": "38px", "fontWeight": "700"}],
+          "body-md": ["15px", {"lineHeight": "20px", "fontWeight": "400"}],
+          "body-lg": ["17px", {"lineHeight": "22px", "fontWeight": "400"}],
+          "headline-lg": ["22px", {"lineHeight": "28px", "fontWeight": "600"}],
+          "label-sm": ["13px", {"lineHeight": "18px", "fontWeight": "500"}],
+          "caption": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+          "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+          "label-md": ["15px", {"lineHeight": "20px", "fontWeight": "600"}]
+        }
+      },
+    },
+  }
+</script>
+<style>
+  @layer base {
+    html {
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    body {
+      overscroll-behavior-y: none;
+    }
+  }
+  .glass-light {
+    background: rgba(249, 249, 249, 0.75);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-bottom: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .glass-bottom {
+    background: rgba(249, 249, 249, 0.85);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border-top: 0.5px solid rgba(60, 60, 67, 0.29);
+  }
+  .segmented-control {
+    background: rgba(120, 120, 128, 0.14);
+    border-radius: 8px;
+    padding: 2px;
+    display: inline-flex;
+  }
+</style>
+<meta content="web_standard" name="shell-type"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+</head>
+<body class="bg-background text-on-background min-h-screen selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TOP FROSTED GLASS BAR (Exact height: h-14 / 56px) -->
+<header class="fixed top-0 left-0 right-0 z-50 glass-light">
+<div class="h-14 px-margin flex items-center justify-between max-w-7xl mx-auto">
+<!-- Brand & Clinical Badge -->
+<div class="flex items-center gap-space-md">
+<div class="w-8 h-8 rounded-lg bg-primary-container flex items-center justify-center text-on-primary shadow-xs">
+<span class="material-symbols-outlined text-[20px]">local_fire_department</span>
+</div>
+<div class="flex items-baseline gap-space-xs">
+<span class="font-headline-md text-headline-md tracking-tight text-on-surface">BurnScan</span>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">ER Triage</span>
+</div>
+</div>
+<!-- Center: Segmented Navigation -->
+<nav class="segmented-control" data-active-classes="bg-surface-container-lowest text-on-surface font-semibold shadow-xs" id="app-nav">
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-ket-qua-do-sau" href="#">Kết quả: Độ sâu</a>
+<a class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant transition-all" data-path="burnscan-giai-thich-mo-hinh-grad-cam" href="#">Giải thích (Grad-CAM)</a>
+</nav>
+<!-- Right: Segmented Role + System Readiness Status -->
+<div class="flex items-center gap-space-md">
+<div class="segmented-control hidden sm:inline-flex">
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all" type="button">Bệnh nhân</button>
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all" type="button">Bác sĩ</button>
+</div>
+<div class="flex items-center gap-space-xs px-space-md py-1 rounded-full bg-surface-container-lowest/80 border border-outline-variant/30 shadow-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Mô hình sẵn sàng</span>
+</div>
+</div>
+</div>
+</header>
+<!-- MAIN CONTENT SLOT: Buffer pt-14 matches Header h-14 exactly, pb-16 clears fixed footer -->
+<main class="pt-14 pb-16 min-h-[calc(100vh-56px)] max-w-7xl mx-auto px-margin"><div class="flex flex-col w-full">
+<!-- TOP BREADCRUMB & STATE SELECTOR -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md pb-space-md">
+<!-- Step Indicator Breadcrumbs (Apple HIG Inset Style) -->
+<nav aria-label="Quy trình chẩn đoán" class="flex items-center gap-space-xs text-caption font-caption text-on-surface-variant flex-wrap">
+<div class="flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>1. Tải ảnh</span>
+</div>
+<span class="text-outline-variant font-normal">/</span>
+<div class="flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>2. Thông tin &amp; hiệu chuẩn</span>
+</div>
+<span class="text-outline-variant font-normal">/</span>
+<div class="flex items-center gap-1 text-secondary font-medium">
+<span class="material-symbols-outlined text-[16px] text-secondary">check_circle</span>
+<span>3. Phân tích</span>
+</div>
+<span class="text-outline-variant font-normal">/</span>
+<div class="flex items-center gap-1 text-primary font-semibold">
+<span class="w-4 h-4 rounded-full bg-primary text-on-primary text-[10px] flex items-center justify-center font-bold">4</span>
+<span class="text-primary">4. Kết quả &amp; Cấp cứu</span>
+</div>
+</nav>
+<!-- State Switcher: Full vs Missing Weight Preview -->
+<div class="flex items-center gap-space-xs">
+<span class="font-caption text-caption text-on-surface-variant hidden md:inline">Chế độ giả lập:</span>
+<div class="segmented-control p-0.5 bg-surface-container" id="state-toggle">
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all" id="btn-state-full" onclick="switchState('full')" type="button">
+          Đầy đủ (Đã có cân nặng)
+        </button>
+<button class="px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all" id="btn-state-missing" onclick="switchState('missing')" type="button">
+          Thiếu cân nặng
+        </button>
+</div>
+</div>
+</div>
+<!-- TITLE AREA & TOP ACTION TOOLBAR -->
+<div class="flex flex-col lg:flex-row lg:items-end justify-between gap-space-md pt-space-xs pb-space-lg">
+<div>
+<h1 class="font-headline-xl text-headline-xl tracking-tight text-on-surface">Kết quả phân tích &amp; Xử trí cấp cứu</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Đánh giá mức độ tổn thương theo tiêu chuẩn Bộ Y tế &amp; Phác đồ bù dịch truyền Parkland</p>
+</div>
+<!-- Right Tinted Action Buttons -->
+<div class="flex items-center gap-space-sm flex-wrap">
+<button class="inline-flex items-center gap-1.5 h-[40px] px-space-md rounded-lg bg-primary-fixed/40 text-primary font-label-md text-label-md hover:bg-primary-fixed/70 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+<span>Xuất phiếu cấp cứu (PDF)</span>
+</button>
+<button class="inline-flex items-center gap-1.5 h-[40px] px-space-md rounded-lg bg-primary-fixed/40 text-primary font-label-md text-label-md hover:bg-primary-fixed/70 active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[18px]">share</span>
+<span>Chia sẻ ca bệnh</span>
+</button>
+</div>
+</div>
+<!-- HIG SEGMENTED WORKSPACE SWITCHER -->
+<div class="pb-space-lg">
+<div class="inline-flex bg-surface-container p-1 rounded-xl shadow-xs">
+<button class="px-space-lg py-1.5 font-label-sm text-label-sm rounded-lg text-on-surface-variant hover:text-on-surface transition-all" type="button">Phân đoạn</button>
+<button class="px-space-lg py-1.5 font-label-sm text-label-sm rounded-lg text-on-surface-variant hover:text-on-surface transition-all" type="button">Độ sâu</button>
+<button class="px-space-lg py-1.5 font-label-sm text-label-sm rounded-lg bg-surface-container-lowest text-primary font-semibold shadow-xs" type="button">Cấp cứu &amp; Bù dịch</button>
+<button class="px-space-lg py-1.5 font-label-sm text-label-sm rounded-lg text-on-surface-variant hover:text-on-surface transition-all" type="button">Hỏi đáp (AI)</button>
+</div>
+</div>
+<!-- MANDATORY SOLID RED-TINTED EMERGENCY ALERT BANNER -->
+<div class="w-full rounded-[14px] p-space-lg mb-space-lg flex items-start gap-space-md bg-[rgba(255,59,48,0.12)] border border-[rgb(255,59,48)]">
+<div class="w-9 h-9 rounded-full bg-error text-on-error flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[22px]">warning</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="font-headline-md text-headline-md font-semibold text-tertiary tracking-tight">
+        Chuyển tuyến cấp cứu đến viện bỏng ngay
+      </div>
+<div class="font-body-sm text-body-sm text-error/90 mt-0.5 font-medium">
+        Lý do: %TBSA lớn hơn 15% ở người lớn (Hiện tại: <span class="font-bold underline decoration-error/50">20% TBSA</span>)
+      </div>
+</div>
+</div>
+<!-- MAIN DUAL-COLUMN LAYOUT (55% LEFT / 45% RIGHT) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start pb-space-xl">
+<!-- ========================================== -->
+<!-- LEFT COLUMN: 55% (~7 Cols) PARKLAND FLUID  -->
+<!-- ========================================== -->
+<div class="lg:col-span-7 flex flex-col gap-space-lg">
+<!-- FRAME 1: STATE ĐẦY ĐỦ (Active by default) -->
+<section class="flex flex-col gap-space-lg transition-all" id="state-full-view">
+<!-- Inset-Grouped Card: Parkland Formula Container -->
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<div class="px-space-lg py-space-md bg-surface-container-low/60 flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">water_drop</span>
+<h2 class="font-label-md text-label-md font-semibold text-on-surface">Dịch truyền Parkland (Ringer Lactate)</h2>
+</div>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-primary-fixed text-on-primary-fixed-variant">Phác đồ chuẩn 4 ml</span>
+</div>
+<!-- Grouped Rows -->
+<div class="flex flex-col">
+<!-- Row 1: Metadata parameters chips -->
+<div class="px-space-lg py-space-md flex flex-wrap items-center gap-space-sm bg-surface-bright">
+<span class="inline-flex items-center gap-1 px-space-md py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-outline">fitness_center</span>
+                Cân nặng: <strong class="font-semibold text-on-surface tabular-nums">60 kg</strong>
+</span>
+<span class="inline-flex items-center gap-1 px-space-md py-1 rounded-full bg-error-container text-on-error-container font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-error">local_fire_department</span>
+                %TBSA: <strong class="font-semibold tabular-nums">20 %</strong>
+</span>
+<span class="inline-flex items-center gap-1 px-space-md py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-[16px] text-outline">schedule</span>
+                Thời điểm: <strong class="font-semibold text-on-surface">Đã bỏng 2 giờ trước</strong>
+</span>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30 ml-4"></div>
+<!-- Row 2: Total 24h Volume (Primary) -->
+<div class="px-space-lg py-space-md flex items-baseline justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-body-lg text-body-lg text-on-surface font-medium">Tổng dịch truyền 24 giờ</span>
+<span class="font-caption text-caption text-on-surface-variant tabular-nums mt-0.5">
+                  4 ml × 60 kg × 20% = <strong class="text-on-surface">4.800 ml</strong> (Ringer Lactate tĩnh mạch)
+                </span>
+</div>
+<div class="text-right">
+<span class="font-headline-lg text-headline-lg font-bold text-primary tabular-nums">4.800 ml</span>
+<div class="font-caption text-caption text-outline">Tổng thể tích 24h</div>
+</div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30 ml-4"></div>
+<!-- Row 3: 8 hours phase -->
+<div class="px-space-lg py-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>
+                  8 giờ đầu <span class="text-on-surface-variant font-normal text-body-sm">(tính từ thời điểm bỏng)</span>
+</span>
+<span class="font-caption text-caption text-error font-medium mt-0.5">
+                  Đã tiêu tốn 2h tại tuyến dưới · Còn lại 6h
+                </span>
+</div>
+<div class="text-right">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface tabular-nums">2.400 ml</div>
+<div class="font-caption text-caption text-primary font-semibold tabular-nums">300 ml/giờ</div>
+</div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30 ml-4"></div>
+<!-- Row 4: 16 hours phase -->
+<div class="px-space-lg py-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium flex items-center gap-1.5">
+<span class="w-2.5 h-2.5 rounded-full bg-primary-fixed-dim"></span>
+                  16 giờ tiếp theo
+                </span>
+<span class="font-caption text-caption text-on-surface-variant mt-0.5">
+                  Giai đoạn duy trì và kiểm soát huyết động
+                </span>
+</div>
+<div class="text-right">
+<div class="font-headline-md text-headline-md font-semibold text-on-surface tabular-nums">2.400 ml</div>
+<div class="font-caption text-caption text-on-surface-variant tabular-nums">150 ml/giờ</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 24-HOUR CLINICAL TIMELINE BAR -->
+<div class="bg-surface-container-lowest rounded-xl shadow-xs p-space-lg">
+<div class="flex items-center justify-between pb-space-md">
+<div class="flex items-center gap-1.5 font-label-md text-label-md font-semibold text-on-surface">
+<span class="material-symbols-outlined text-outline text-[18px]">history_toggle_off</span>
+<span>Lộ trình truyền dịch 24 giờ</span>
+</div>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-surface-container text-on-surface-variant tabular-nums">T = +02:00</span>
+</div>
+<!-- Timeline graphical bar -->
+<div class="pt-space-md pb-space-sm">
+<div class="relative w-full h-[18px] rounded-full bg-surface-container overflow-hidden flex shadow-inner">
+<!-- 0h - 8h Zone (50% of the bar) -->
+<div class="w-1/2 h-full bg-[#E5F1FF] relative flex items-center">
+<!-- Elapsed portion (2 hours out of 8h = 2/24 of total timeline = 8.333% total width, or 25% of this 50% block) -->
+<div class="h-full bg-primary flex items-center justify-end px-1" style="width: 25%;">
+<span class="w-2 h-2 rounded-full bg-surface-container-lowest animate-pulse"></span>
+</div>
+<!-- Remaining 6 hours of first stage -->
+<div class="h-full flex-1"></div>
+</div>
+<!-- Separator marker between Phase 1 and Phase 2 -->
+<div class="w-[2px] h-full bg-primary-container z-10"></div>
+<!-- 8h - 24h Zone (Remaining 50% of the bar) -->
+<div class="w-1/2 h-full bg-[#F0F4FF]"></div>
+</div>
+<!-- Timeline Pins & Labels -->
+<div class="relative w-full flex justify-between font-caption text-caption text-on-surface-variant mt-2 tabular-nums">
+<div class="text-left">
+<span class="font-semibold text-on-surface block">0h</span>
+<span class="text-[11px] text-outline">Thời điểm bỏng</span>
+</div>
+<!-- Indicator for 2h Elapsed -->
+<div class="absolute left-[12.5%] -translate-x-1/2 -top-7 flex flex-col items-center">
+<span class="px-1.5 py-0.5 rounded bg-inverse-surface text-inverse-on-surface text-[10px] font-semibold whitespace-nowrap shadow-xs">
+                  Hiện tại: giờ thứ 2
+                </span>
+<div class="w-1 h-1.5 bg-inverse-surface"></div>
+</div>
+<div class="text-center -ml-8">
+<span class="font-semibold text-primary block">8h</span>
+<span class="text-[11px] text-outline">Hết giai đoạn 1 (50%)</span>
+</div>
+<div class="text-right">
+<span class="font-semibold text-on-surface block">24h</span>
+<span class="text-[11px] text-outline">Hoàn thành bù dịch</span>
+</div>
+</div>
+</div>
+<!-- Clinical Action Callout under bar -->
+<div class="mt-space-md p-space-md rounded-lg bg-surface-container-low flex items-start gap-space-sm">
+<span class="material-symbols-outlined text-primary text-[20px] mt-0.5">medication_liquid</span>
+<div class="text-body-sm font-body-sm text-on-surface leading-snug">
+<strong class="font-semibold text-on-surface">Lưu ý lâm sàng:</strong> 8 giờ đầu còn lại <span class="font-semibold text-primary tabular-nums">1.800 ml</span> trong <span class="font-semibold tabular-nums">6 giờ</span>, tốc độ truyền khuyến nghị <span class="font-semibold text-primary tabular-nums">300 ml/giờ</span> (hoặc tương đương <span class="font-semibold tabular-nums">~100 giọt/phút</span> với dây truyền tiêu chuẩn 20 gtt/ml).
+            </div>
+</div>
+</div>
+</section>
+<!-- FRAME 2: STATE THIẾU CÂN NẶNG (Hidden by default, activated via switcher) -->
+<section class="hidden flex flex-col gap-space-lg" id="state-missing-view">
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden opacity-60 grayscale-[50%] pointer-events-none">
+<div class="px-space-lg py-space-md bg-surface-container-low/60 flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-outline text-[20px]">water_drop</span>
+<h2 class="font-label-md text-label-md font-semibold text-on-surface">Dịch truyền Parkland (Ringer Lactate)</h2>
+</div>
+<span class="font-caption text-caption px-space-xs py-0.5 rounded bg-surface-container-high text-on-surface-variant">Chờ thông số</span>
+</div>
+<div class="p-space-xl flex flex-col items-center justify-center text-center">
+<div class="w-12 h-12 rounded-full bg-surface-container-highest flex items-center justify-center text-outline mb-2">
+<span class="material-symbols-outlined text-[28px]">balance</span>
+</div>
+<span class="font-headline-md text-headline-md text-on-surface">Chưa thể tính lượng dịch truyền</span>
+<p class="font-body-sm text-body-sm text-on-surface-variant max-w-sm mt-1">
+              Phác đồ Parkland yêu cầu chỉ số khối lượng cơ thể (kg) để xác định chính xác thể tích dịch truyền Ringer Lactate chống sốc bỏng.
+            </p>
+</div>
+</div>
+<!-- Callout Banner to Input Weight -->
+<a class="p-space-lg rounded-xl bg-surface-container-lowest shadow-xs flex items-center justify-between hover:bg-surface-bright transition-all group" href="#">
+<div class="flex items-center gap-space-md">
+<div class="w-10 h-10 rounded-lg bg-primary-fixed flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[22px]">monitor_weight</span>
+</div>
+<div>
+<div class="font-label-md text-label-md font-semibold text-primary group-hover:underline">
+                Nhập cân nặng để tính lượng dịch truyền ↗
+              </div>
+<div class="font-caption text-caption text-on-surface-variant">
+                Quay lại Bước 2: Bổ sung cân nặng ước đoán hoặc cân đo thực tế
+              </div>
+</div>
+</div>
+<span class="material-symbols-outlined text-primary group-hover:translate-x-1 transition-transform">arrow_forward_ios</span>
+</a>
+</section>
+<!-- Clinical Diagnostic Metadata Summary Bento Card -->
+<div class="bg-surface-container-lowest rounded-xl shadow-xs p-space-lg">
+<div class="flex items-center justify-between pb-space-sm mb-space-sm">
+<div class="font-label-md text-label-md font-semibold text-on-surface flex items-center gap-1.5">
+<span class="material-symbols-outlined text-outline text-[18px]">clinical_notes</span>
+<span>Chỉ số sinh tồn &amp; Giám sát nước tiểu</span>
+</div>
+<span class="font-caption text-caption text-outline">Theo dõi liên tục</span>
+</div>
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-space-md pt-1">
+<div class="p-space-md rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant">Mục tiêu nước tiểu</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface mt-1 tabular-nums">0,5 – 1,0 ml/kg/h</span>
+<span class="font-caption text-[11px] text-secondary font-medium">30 – 60 ml/h</span>
+</div>
+<div class="p-space-md rounded-lg bg-surface-container-low flex flex-col">
+<span class="font-caption text-caption text-on-surface-variant">Huyết áp trung bình (MAP)</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface mt-1 tabular-nums">≥ 65 mmHg</span>
+<span class="font-caption text-[11px] text-secondary font-medium">Đảm bảo tưới máu tạng</span>
+</div>
+<div class="p-space-md rounded-lg bg-surface-container-low flex flex-col col-span-2 sm:col-span-1">
+<span class="font-caption text-caption text-on-surface-variant">Hematocrit (Hct)</span>
+<span class="font-label-md text-label-md font-semibold text-on-surface mt-1 tabular-nums">Duy trì &lt; 45%</span>
+<span class="font-caption text-[11px] text-primary font-medium">Tránh cô đặc máu</span>
+</div>
+</div>
+</div>
+</div>
+<!-- ========================================== -->
+<!-- RIGHT COLUMN: 45% (~5 Cols) TRIAGE CRITERIA -->
+<!-- ========================================== -->
+<div class="lg:col-span-5 flex flex-col gap-space-lg">
+<!-- Inset-Grouped List: Tiêu chuẩn chuyển viện -->
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<div class="px-space-lg py-space-md bg-surface-container-low/60 flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-tertiary text-[20px]">transfer_within_a_station</span>
+<h2 class="font-label-md text-label-md font-semibold text-on-surface">Đánh giá nguy cơ &amp; Tiêu chuẩn chuyển viện</h2>
+</div>
+<span class="font-caption text-caption font-semibold text-tertiary">1/3 Cảnh báo</span>
+</div>
+<div class="flex flex-col">
+<!-- Criteria Row 1: Over threshold -->
+<div class="px-space-lg py-space-md flex items-center justify-between bg-error-container/20">
+<div class="flex items-center gap-space-md">
+<span class="material-symbols-outlined text-error text-[20px] shrink-0">error</span>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-semibold">%TBSA lớn hơn 15% (người lớn)</span>
+<span class="font-caption text-caption text-on-surface-variant">Phát hiện diện tích bỏng ước tính: 20%</span>
+</div>
+</div>
+<div class="px-2.5 py-1 rounded-full bg-error-container text-on-error-container font-label-sm text-[12px] font-semibold shrink-0">
+              Vượt ngưỡng
+            </div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30 ml-4"></div>
+<!-- Criteria Row 2: Deep 3rd degree -->
+<div class="px-space-lg py-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-space-md">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0">check_circle</span>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Có bỏng độ 3 (Hoại tử sâu)</span>
+<span class="font-caption text-caption text-on-surface-variant">Tổn thương chủ yếu độ II nông</span>
+</div>
+</div>
+<div class="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-medium shrink-0">
+              Không
+            </div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30 ml-4"></div>
+<!-- Criteria Row 3: Sensitive anatomical regions -->
+<div class="px-space-lg py-space-md flex items-center justify-between bg-surface-container-lowest">
+<div class="flex items-center gap-space-md">
+<span class="material-symbols-outlined text-secondary text-[20px] shrink-0">check_circle</span>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface font-medium">Vùng nhạy cảm: mặt, bàn tay, sinh dục</span>
+<span class="font-caption text-caption text-on-surface-variant">Vị trí: Cẳng tay &amp; Đùi ngoài</span>
+</div>
+</div>
+<div class="px-2.5 py-1 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[12px] font-medium shrink-0">
+              Không
+            </div>
+</div>
+</div>
+</div>
+<!-- Inset-Grouped List: Sơ cứu ban đầu tại chỗ -->
+<div class="bg-surface-container-lowest rounded-xl shadow-xs overflow-hidden">
+<div class="px-space-lg py-space-md bg-surface-container-low/60 flex items-center justify-between">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-primary text-[20px]">medical_services</span>
+<h2 class="font-label-md text-label-md font-semibold text-on-surface">Hướng dẫn sơ cứu ban đầu tại chỗ</h2>
+</div>
+<span class="font-caption text-caption text-outline">Quy chuẩn BYT</span>
+</div>
+<div class="p-space-lg flex flex-col gap-space-md">
+<!-- Instruction 1 -->
+<div class="flex items-start gap-space-md">
+<span class="w-6 h-6 rounded-full bg-primary-fixed text-on-primary-fixed-variant flex items-center justify-center font-bold text-caption shrink-0 mt-0.5">1</span>
+<div class="text-body-sm font-body-sm text-on-surface">
+<strong class="font-semibold text-on-surface">Làm mát vết bỏng</strong> bằng nước sạch (15–20°C) trong 15–20 phút ngay lập tức. <span class="text-error font-medium">Tránh dùng nước đá lạnh</span> gây co mạch và hoại tử mô thứ phát.
+            </div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30"></div>
+<!-- Instruction 2 -->
+<div class="flex items-start gap-space-md">
+<span class="w-6 h-6 rounded-full bg-primary-fixed text-on-primary-fixed-variant flex items-center justify-center font-bold text-caption shrink-0 mt-0.5">2</span>
+<div class="text-body-sm font-body-sm text-on-surface">
+<strong class="font-semibold text-on-surface">Che phủ vô trùng</strong> bằng gạc vô khuẩn sạch hoặc vải sạch vô trùng. <span class="text-error font-medium">Tuyệt đối KHÔNG</span> bôi kem đánh răng, mỡ trăn, nước mắm hay các loại lá thuốc dân gian.
+            </div>
+</div>
+<div class="h-[0.5px] bg-outline-variant/30"></div>
+<!-- Instruction 3 -->
+<div class="flex items-start gap-space-md">
+<span class="w-6 h-6 rounded-full bg-primary-fixed text-on-primary-fixed-variant flex items-center justify-center font-bold text-caption shrink-0 mt-0.5">3</span>
+<div class="text-body-sm font-body-sm text-on-surface">
+<strong class="font-semibold text-on-surface">Bảo tồn bóng nước:</strong> Giữ nguyên bọng nước, không chọc vỡ các bóng nước để bảo vệ hàng rào biểu mô tự nhiên chống nhiễm khuẩn huyết.
+            </div>
+</div>
+</div>
+</div>
+<!-- Quick Triage Summary Badge -->
+<div class="p-space-md rounded-xl bg-surface-container-low flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-outline text-[20px]">badge</span>
+<span class="font-caption text-caption text-on-surface-variant">Phân loại cấp cứu:</span>
+<span class="font-label-sm text-label-sm font-semibold text-tertiary">Mức độ II (Ưu tiên vận chuyển)</span>
+</div>
+<span class="material-symbols-outlined text-outline text-[18px]">verified</span>
+</div>
+</div>
+</div>
+<!-- CLINICAL FOOTNOTE -->
+<div class="font-caption text-caption text-on-surface-variant text-center mb-space-xl max-w-3xl mx-auto px-margin">
+    Công thức theo hướng dẫn của Bộ Y tế. Bác sĩ điều chỉnh theo lượng nước tiểu (duy trì 0,5–1,0 ml/kg/giờ) và diễn biến lâm sàng thực tế.
+  </div>
+<!-- DOCKED HIG CLINICAL OPERATION BAR (Sticky Glass Bottom) -->
+<div class="sticky bottom-12 left-0 right-0 z-40 bg-surface-bright/90 backdrop-blur-md -mx-margin px-margin py-3 shadow-md mb-2">
+<div class="max-w-7xl mx-auto flex items-center justify-between">
+<!-- Left: Back Navigation (Tinted Button) -->
+<button class="inline-flex items-center gap-1 h-[44px] px-space-lg rounded-xl bg-surface-container text-on-surface font-label-md text-label-md hover:bg-surface-container-high active:scale-[0.98] transition-all" type="button">
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+<span>Quay lại độ sâu</span>
+</button>
+<!-- Right: STRICTLY ONLY ONE PRIMARY BLUE BUTTON -->
+<button class="inline-flex items-center gap-2 h-[44px] px-space-xl rounded-xl bg-primary text-on-primary font-label-md text-label-md font-medium shadow-sm hover:bg-primary-container active:scale-[0.98] transition-all" type="button">
+<span>Tiến hành chuyển tuyến &amp; Lưu hồ sơ</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<!-- INLINE VANILLA JAVASCRIPT FOR INTERACTIVE STATE SWITCHING -->
+<script>
+    function switchState(state) {
+      const fullView = document.getElementById('state-full-view');
+      const missingView = document.getElementById('state-missing-view');
+      const btnFull = document.getElementById('btn-state-full');
+      const btnMissing = document.getElementById('btn-state-missing');
+
+      if (state === 'missing') {
+        fullView.classList.add('hidden');
+        missingView.classList.remove('hidden');
+
+        btnFull.className = 'px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all';
+        btnMissing.className = 'px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all';
+      } else {
+        missingView.classList.add('hidden');
+        fullView.classList.remove('hidden');
+
+        btnMissing.className = 'px-space-md py-1 font-label-sm text-label-sm rounded-[6px] text-on-surface-variant hover:text-on-surface transition-all';
+        btnFull.className = 'px-space-md py-1 font-label-sm text-label-sm rounded-[6px] bg-surface-container-lowest text-on-surface font-semibold shadow-xs transition-all';
+      }
+    }
+  </script>
+</div></main>
+<!-- BOTTOM FROSTED GLASS BAR -->
+<footer class="fixed bottom-0 left-0 right-0 z-50 glass-bottom h-12">
+<div class="max-w-7xl mx-auto h-full px-margin flex items-center justify-between">
+<div class="font-caption text-caption text-on-surface-variant leading-none flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-[16px] text-outline">info</span>
+<span>Công cụ hỗ trợ tham khảo lâm sàng, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.</span>
+</div>
+<div class="font-caption text-caption text-outline tabular-nums">
+      ResNet50 / Grad-CAM+ | v2.4
+    </div>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BurnScan - Tải ảnh vết bỏng</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --app-bg: #F2F2F7;
+      --surface: #FFFFFF;
+      --text-primary: #000000;
+      --text-secondary: rgba(60, 60, 67, 0.60);
+      --text-tertiary: rgba(60, 60, 67, 0.30);
+      --separator: rgba(60, 60, 67, 0.29);
+      --control-fill: rgba(120, 120, 128, 0.12);
+      --accent: #007AFF;
+      --accent-tint: rgba(0, 122, 255, 0.12);
+      --grade-ok: #248A3D;
+      --grade-ok-tint: rgba(52, 199, 89, 0.12);
+      --grade-error: #D70015;
+      --grade-error-tint: rgba(255, 59, 48, 0.12);
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+      background-color: var(--app-bg);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+      margin: 0;
+      padding: 0;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Apple Frosted Glass */
+    .glass-light {
+      background: rgba(249, 249, 249, 0.75);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-bottom: 0.5px solid var(--separator);
+    }
+
+    .glass-bottom {
+      background: rgba(249, 249, 249, 0.78);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .dark-glass-toolbar {
+      background: rgba(28, 28, 30, 0.65);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 0.5px solid rgba(255, 255, 255, 0.15);
+    }
+
+    /* Apple segmented control */
+    .segmented-control {
+      background: rgba(120, 120, 128, 0.14);
+      border-radius: 8px;
+      padding: 2px;
+      display: inline-flex;
+    }
+
+    .segmented-btn {
+      padding: 4px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      color: var(--text-secondary);
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .segmented-btn.active {
+      background: #FFFFFF;
+      color: #000000;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 0.5px rgba(0, 0, 0, 0.04);
+      font-weight: 600;
+    }
+
+    /* Inset grouped list */
+    .inset-grouped {
+      background: #FFFFFF;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0.5px 1px rgba(0,0,0,0.04);
+    }
+
+    .inset-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      padding: 0 16px;
+      position: relative;
+    }
+
+    .inset-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 52px;
+      right: 0;
+      height: 0.5px;
+      background: var(--separator);
+    }
+
+    .inset-item-dense:not(:last-child)::after {
+      left: 16px;
+    }
+
+    .dropzone-dashed {
+      border: 1.5px dashed #C7C7CC;
+      transition: all 0.2s ease;
+    }
+    .dropzone-dashed:hover {
+      border-color: #007AFF;
+      background-color: rgba(0, 122, 255, 0.02);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-blue-100 selection:text-blue-900">
+
+  <!-- TOP TOOLBAR (Apple macOS / iPadOS HIG Light Glass, 52px) -->
+  <header class="sticky top-0 z-50 glass-light h-[52px] px-6 flex items-center justify-between">
+    <!-- Left: Abstract Brand Logo + Wordmark -->
+    <div class="flex items-center gap-3">
+      <div class="w-8 h-8 rounded-[8px] bg-[#007AFF] flex items-center justify-center text-white shadow-sm">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2c0 4-5 6-5 10a5 5 0 0 0 10 0c0-4-5-6-5-10z"></path>
+          <path d="M12 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" fill="currentColor"></path>
+        </svg>
+      </div>
+      <div class="flex items-baseline gap-1.5">
+        <span class="text-[17px] font-bold tracking-tight text-black">BurnScan</span>
+        <span class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-[#007AFF] border border-blue-200/50">ER Triage</span>
+      </div>
+    </div>
+
+    <!-- Center: Segmented Control -->
+    <div class="segmented-control">
+      <button class="segmented-btn active" id="tab-patient">Bệnh nhân</button>
+      <button class="segmented-btn" id="tab-doctor">Bác sĩ</button>
+    </div>
+
+    <!-- Right: Model Readiness & Status -->
+    <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-[rgba(60,60,67,0.12)] shadow-xs">
+        <span class="w-2 h-2 rounded-full bg-[#248A3D] animate-pulse"></span>
+        <span class="text-[12px] font-medium text-[rgba(60,60,67,0.85)]">Mô hình sẵn sàng</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN SCROLLABLE CONTENT -->
+  <main class="flex-1 w-full max-w-[840px] mx-auto px-6 py-8">
+    
+    <!-- STEP INDICATOR ROW (4 STEPS: Tải ảnh · Thông tin · Phân tích · Kết quả) -->
+    <nav aria-label="Tiến trình đánh giá" class="mb-7">
+      <div class="flex items-center justify-between">
+        
+        <!-- Step 1: Active -->
+        <div class="flex items-center gap-2.5">
+          <div class="w-7 h-7 rounded-full bg-[#007AFF] text-white flex items-center justify-center text-[13px] font-semibold shadow-xs">
+            1
+          </div>
+          <span class="text-[14px] font-semibold text-[#007AFF]">Tải ảnh</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 2: Upcoming -->
+        <div class="flex items-center gap-2.5 opacity-60">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium">
+            2
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)]">Thông tin</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 3: Upcoming -->
+        <div class="flex items-center gap-2.5 opacity-60">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium">
+            3
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)]">Phân tích</span>
+        </div>
+
+        <div class="h-[1px] flex-1 mx-3 bg-[rgba(60,60,67,0.15)]"></div>
+
+        <!-- Step 4: Upcoming -->
+        <div class="flex items-center gap-2.5 opacity-60">
+          <div class="w-7 h-7 rounded-full bg-[rgba(120,120,128,0.15)] text-[rgba(60,60,67,0.7)] flex items-center justify-center text-[13px] font-medium">
+            4
+          </div>
+          <span class="text-[14px] font-medium text-[rgba(60,60,67,0.7)]">Kết quả</span>
+        </div>
+
+      </div>
+    </nav>
+
+    <!-- LARGE TITLE & SUBTITLE -->
+    <header class="mb-6">
+      <h1 class="text-[32px] font-bold text-black tracking-tight leading-tight">Tải ảnh vết bỏng</h1>
+      <p class="text-[15px] text-[rgba(60,60,67,0.7)] mt-1.5 leading-normal">
+        Chụp rõ vùng tổn thương, đủ sáng. Đặt thước hoặc thẻ căn cước cạnh vết bỏng nếu có.
+      </p>
+    </header>
+
+    <!-- STATE SWITCHER TABS (Demo switcher for User Request: Frame 1 / Frame 2 / Frame 3) -->
+    <div class="mb-6 flex items-center justify-between p-2 rounded-xl bg-white border border-[rgba(60,60,67,0.15)] shadow-xs">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-[rgba(60,60,67,0.5)] px-2">Trạng thái minh họa:</span>
+        <div class="inline-flex rounded-lg p-1 bg-[rgba(120,120,128,0.12)]">
+          <button onclick="switchView('frame1')" id="btn-f1" class="px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all">Khung 1: Drop Zone</button>
+          <button onclick="switchView('frame2')" id="btn-f2" class="px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all">Khung 2: Đã tải & Preview</button>
+          <button onclick="switchView('frame3')" id="btn-f3" class="px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all">Khung 3: Báo lỗi</button>
+        </div>
+      </div>
+      <span class="text-[12px] text-[rgba(60,60,67,0.6)] pr-2 hidden sm:inline">Tuân thủ Apple HIG</span>
+    </div>
+
+    <!-- ERROR BANNER (Frame 3 condition: solid red-tinted surface, icon + text) -->
+    <div id="error-banner" class="hidden mb-6 rounded-xl bg-[#FFF2F2] border border-[#FF3B30]/30 p-4 transition-all">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-full bg-[#FF3B30]/15 flex items-center justify-center shrink-0 text-[#D70015]">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <div class="flex-1">
+          <p class="text-[14px] font-semibold text-[#D70015]">Định dạng không hỗ trợ</p>
+          <p class="text-[13px] text-[#D70015]/90 mt-0.5">Vui lòng chọn ảnh định dạng JPG hoặc PNG có dung lượng dưới 15 MB.</p>
+        </div>
+        <button onclick="dismissError()" class="p-1.5 text-[#D70015]/70 hover:text-[#D70015] rounded-lg hover:bg-red-100/50">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- FRAME 1 & 3: UPLOAD DROP ZONE SECTION -->
+    <div id="upload-panel-container" class="space-y-6">
+      
+      <!-- DROP ZONE (300px tall, solid white 16px panel, dashed 1px #C7C7CC border) -->
+      <section class="bg-white rounded-[16px] dropzone-dashed h-[300px] p-6 flex flex-col items-center justify-center text-center shadow-xs relative">
+        <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/jpeg,image/png">
+        
+        <!-- Outline Photo Icon (Apple HIG SF Symbols Style) -->
+        <div class="w-16 h-16 rounded-full bg-[rgba(120,120,128,0.08)] flex items-center justify-center mb-3 text-[rgba(60,60,67,0.7)]">
+          <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="4" ry="4"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+        </div>
+
+        <!-- Labels -->
+        <h2 class="text-[17px] font-semibold text-black tracking-tight">Kéo ảnh vào đây</h2>
+        <p class="text-[13px] text-[rgba(60,60,67,0.6)] mt-1 mb-5">JPG hoặc PNG, tối đa 15 MB</p>
+
+        <!-- Two Buttons: Solid Blue "Chọn ảnh" + Tinted "Chụp bằng camera" -->
+        <div class="flex items-center gap-3 relative z-10" onclick="event.stopPropagation()">
+          <button onclick="document.getElementById('file-input').click()" class="h-10 px-5 rounded-[10px] bg-[#007AFF] text-white font-medium text-[15px] hover:bg-[#006ee6] active:scale-[0.98] transition-all flex items-center gap-2 shadow-xs">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Chọn ảnh</span>
+          </button>
+
+          <button onclick="switchView('frame2')" class="h-10 px-4 rounded-[10px] bg-[rgba(0,122,255,0.12)] text-[#007AFF] font-medium text-[15px] hover:bg-[rgba(0,122,255,0.18)] active:scale-[0.98] transition-all flex items-center gap-2">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span>Chụp bằng camera</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- GUIDELINES: INSET GROUPED LIST (3 rows, leading outline icons) -->
+      <section>
+        <h3 class="text-[13px] font-medium text-[rgba(60,60,67,0.6)] uppercase tracking-wide px-4 mb-2">Hướng dẫn thu thập hình ảnh chuẩn lâm sàng</h3>
+        <div class="inset-grouped">
+          <!-- Row 1: Đủ ánh sáng -->
+          <div class="inset-item">
+            <div class="flex items-center gap-3.5">
+              <div class="w-7 h-7 rounded-[8px] bg-[rgba(120,120,128,0.1)] flex items-center justify-center text-[rgba(60,60,67,0.85)]">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="5"></circle>
+                  <line x1="12" y1="1" x2="12" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="23"></line>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                  <line x1="1" y1="12" x2="3" y2="12"></line>
+                  <line x1="21" y1="12" x2="23" y2="12"></line>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+              </div>
+              <span class="text-[15px] font-medium text-black">Đủ ánh sáng</span>
+            </div>
+            <span class="text-[13px] text-[rgba(60,60,67,0.6)]">Tránh bóng tối hoặc ánh đèn chói lóa</span>
+          </div>
+
+          <!-- Row 2: Chụp thẳng góc -->
+          <div class="inset-item">
+            <div class="flex items-center gap-3.5">
+              <div class="w-7 h-7 rounded-[8px] bg-[rgba(120,120,128,0.1)] flex items-center justify-center text-[rgba(60,60,67,0.85)]">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <line x1="12" y1="8" x2="12" y2="16"></line>
+                  <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+              </div>
+              <span class="text-[15px] font-medium text-black">Chụp thẳng góc</span>
+            </div>
+            <span class="text-[13px] text-[rgba(60,60,67,0.6)]">Góc máy vuông góc 90° với bề mặt da</span>
+          </div>
+
+          <!-- Row 3: Đặt thước cạnh vết bỏng -->
+          <div class="inset-item">
+            <div class="flex items-center gap-3.5">
+              <div class="w-7 h-7 rounded-[8px] bg-[rgba(120,120,128,0.1)] flex items-center justify-center text-[rgba(60,60,67,0.85)]">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.3 8.7 8.7 21.3a1 1 0 0 1-1.4 0l-4.6-4.6a1 1 0 0 1 0-1.4L15.3 2.7a1 1 0 0 1 1.4 0l4.6 4.6a1 1 0 0 1 0 1.4Z"></path>
+                  <path d="m14.5 4.5-2 2"></path>
+                  <path d="m11.5 7.5-1 1"></path>
+                  <path d="m8.5 10.5-2 2"></path>
+                </svg>
+              </div>
+              <span class="text-[15px] font-medium text-black">Đặt thước cạnh vết bỏng</span>
+            </div>
+            <span class="text-[13px] text-[rgba(60,60,67,0.6)]">Hoặc thẻ căn cước để đối chiếu diện tích (TBSA)</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRIVACY NOTE: One line with shield icon -->
+      <footer class="flex items-center justify-center gap-2 py-1 px-4 text-center">
+        <svg class="w-4 h-4 text-[#248A3D] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          <path d="m9 12 2 2 4-4"></path>
+        </svg>
+        <span class="text-[13px] text-[rgba(60,60,67,0.7)]">
+          Ảnh được tự động xóa vị trí GPS và thông tin thiết bị (EXIF) trước khi xử lý.
+        </span>
+      </footer>
+
+    </div>
+
+    <!-- FRAME 2: AFTER UPLOAD (Preview on #1C1C1E + Floating dark-glass toolbar + Inset metadata list) -->
+    <div id="preview-panel-container" class="hidden space-y-6">
+      
+      <!-- PHOTO PREVIEW VIEWER (Medical background #1C1C1E, 380px tall) -->
+      <section class="rounded-[16px] bg-[#1C1C1E] overflow-hidden relative shadow-sm flex flex-col items-center justify-center h-[380px] border border-black/10">
+        
+        <!-- Synthetic Clinical Reference Graphic: Skin Burn with Medical Measurement Grid -->
+        <div class="w-full h-full relative flex items-center justify-center bg-radial from-neutral-800 to-[#1C1C1E]">
+          <svg class="w-full h-full max-h-[340px]" viewBox="0 0 600 360" fill="none">
+            <!-- Anatomical skin outline representation -->
+            <path d="M80,180 C110,130 180,100 280,110 C390,120 480,140 520,190 C500,260 410,290 290,280 C180,270 100,240 80,180 Z" fill="#E8B598" opacity="0.85"/>
+            <!-- Thermal burn injury simulation zone -->
+            <path d="M220,160 C260,135 340,145 370,180 C360,225 310,240 250,230 C210,220 200,190 220,160 Z" fill="#FF7B72" opacity="0.7"/>
+            <path d="M245,175 C275,160 325,165 340,190 C335,215 300,225 265,220 C240,210 235,195 245,175 Z" fill="#D70015" opacity="0.8"/>
+            <circle cx="285" cy="190" r="14" fill="#9E0000" opacity="0.9"/>
+            
+            <!-- Reference ruler placement graphic -->
+            <rect x="410" y="130" width="30" height="150" rx="4" fill="#FFFFFF" stroke="#000000" stroke-width="1.5"/>
+            <!-- Ruler centimeter ticks -->
+            <line x1="410" y1="140" x2="425" y2="140" stroke="#000" stroke-width="1.5"/>
+            <line x1="410" y1="155" x2="420" y2="155" stroke="#666" stroke-width="1"/>
+            <line x1="410" y1="170" x2="425" y2="170" stroke="#000" stroke-width="1.5"/>
+            <line x1="410" y1="185" x2="420" y2="185" stroke="#666" stroke-width="1"/>
+            <line x1="410" y1="200" x2="425" y2="200" stroke="#000" stroke-width="1.5"/>
+            <line x1="410" y1="215" x2="420" y2="215" stroke="#666" stroke-width="1"/>
+            <line x1="410" y1="230" x2="425" y2="230" stroke="#000" stroke-width="1.5"/>
+            <line x1="410" y1="245" x2="420" y2="245" stroke="#666" stroke-width="1"/>
+            <line x1="410" y1="260" x2="425" y2="260" stroke="#000" stroke-width="1.5"/>
+            <text x="430" y="144" fill="#000" font-size="10" font-family="monospace">0</text>
+            <text x="430" y="204" fill="#000" font-size="10" font-family="monospace">5</text>
+            <text x="428" y="264" fill="#000" font-size="10" font-family="monospace">10</text>
+            <text x="415" y="122" fill="#FFFFFF" font-size="11" font-weight="bold">THƯỚC CHUẨN</text>
+
+            <!-- Triage detection crosshair marker -->
+            <circle cx="285" cy="190" r="46" stroke="#007AFF" stroke-width="1.5" stroke-dasharray="4 4"/>
+            <text x="245" y="132" fill="#FFFFFF" font-size="12" font-weight="600" opacity="0.9">Vùng tổn thương nhiệt</text>
+          </svg>
+        </div>
+
+        <!-- FLOATING DARK-GLASS TOOLBAR OVER BOTTOM OF PHOTO (rgba(28,28,30,0.55), blur 20px, white text) -->
+        <div class="absolute bottom-4 dark-glass-toolbar rounded-full px-3 py-1.5 flex items-center gap-1 shadow-lg">
+          <!-- Xoay trái -->
+          <button class="h-8 px-3 rounded-full text-white/90 hover:text-white hover:bg-white/10 text-[13px] font-medium flex items-center gap-1.5 transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2.5 2v6h6"></path>
+              <path d="M2.66 15.57a10 10 0 1 0 .57-8.38L2.5 8"></path>
+            </svg>
+            <span>Xoay trái</span>
+          </button>
+          
+          <div class="w-[1px] h-4 bg-white/20"></div>
+
+          <!-- Xoay phải -->
+          <button class="h-8 px-3 rounded-full text-white/90 hover:text-white hover:bg-white/10 text-[13px] font-medium flex items-center gap-1.5 transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6"></path>
+              <path d="M21.34 15.57a10 10 0 1 1-.57-8.38L21.5 8"></path>
+            </svg>
+            <span>Xoay phải</span>
+          </button>
+
+          <div class="w-[1px] h-4 bg-white/20"></div>
+
+          <!-- Cắt -->
+          <button class="h-8 px-3 rounded-full text-white/90 hover:text-white hover:bg-white/10 text-[13px] font-medium flex items-center gap-1.5 transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 2v14a2 2 0 0 0 2 2h14"></path>
+              <path d="M18 22V8a2 2 0 0 0-2-2H2"></path>
+            </svg>
+            <span>Cắt</span>
+          </button>
+
+          <div class="w-[1px] h-4 bg-white/20"></div>
+
+          <!-- Đổi ảnh -->
+          <button onclick="switchView('frame1')" class="h-8 px-3 rounded-full text-white/90 hover:text-white hover:bg-white/10 text-[13px] font-medium flex items-center gap-1.5 transition-all">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              <polyline points="18 2 22 6 18 10"></polyline>
+              <polyline points="15 6 9 12 5 8"></polyline>
+            </svg>
+            <span>Đổi ảnh</span>
+          </button>
+        </div>
+
+      </section>
+
+      <!-- INSET LIST: FILE METADATA & EXIF REMOVAL CONFIRMATION -->
+      <section>
+        <h3 class="text-[13px] font-medium text-[rgba(60,60,67,0.6)] uppercase tracking-wide px-4 mb-2">Thông số tệp & Bảo mật lâm sàng</h3>
+        <div class="inset-grouped">
+          <!-- Row 1: Tên tệp -->
+          <div class="inset-item inset-item-dense">
+            <span class="text-[15px] text-[rgba(60,60,67,0.8)]">Tên tệp</span>
+            <span class="text-[15px] font-semibold text-black font-mono">anh_bong_01.jpg</span>
+          </div>
+
+          <!-- Row 2: Kích thước -->
+          <div class="inset-item inset-item-dense">
+            <span class="text-[15px] text-[rgba(60,60,67,0.8)]">Kích thước</span>
+            <span class="text-[15px] font-semibold text-black tabular-nums">1920 × 1080 px (3.2 MB)</span>
+          </div>
+
+          <!-- Row 3: Dữ liệu EXIF (Đã xóa with green check) -->
+          <div class="inset-item inset-item-dense">
+            <span class="text-[15px] text-[rgba(60,60,67,0.8)]">Dữ liệu EXIF</span>
+            <div class="flex items-center gap-1.5 text-[#248A3D] font-semibold text-[15px]">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              <span>Đã xóa vị trí GPS & Thiết bị</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+  </main>
+
+  <!-- BOTTOM GLASS ACTION BAR (Fixed for Apple iPadOS/macOS HIG) -->
+  <footer class="sticky bottom-0 z-50 glass-bottom px-6 py-3">
+    <div class="max-w-[840px] mx-auto flex items-center justify-between">
+      
+      <!-- Footer disclaimer required by user spec -->
+      <div class="text-[12px] text-[rgba(60,60,67,0.65)] leading-tight hidden md:block">
+        Công cụ hỗ trợ tham khảo, không thay thế chẩn đoán của bác sĩ. Đồ án CS406.
+      </div>
+
+      <!-- Action buttons -->
+      <div class="flex items-center gap-3 ml-auto w-full md:w-auto justify-end">
+        <!-- Secondary Tinted Button: "Chọn lại" -->
+        <button onclick="switchView('frame1')" class="h-10 px-5 rounded-[10px] bg-[rgba(0,122,255,0.12)] text-[#007AFF] font-medium text-[15px] hover:bg-[rgba(0,122,255,0.18)] active:scale-[0.98] transition-all flex items-center justify-center min-w-[100px]">
+          Chọn lại
+        </button>
+
+        <!-- Primary Solid Blue Button: "Tiếp tục" -->
+        <button id="btn-continue" onclick="handleContinue()" class="h-10 px-6 rounded-[10px] bg-[#007AFF] text-white font-medium text-[15px] hover:bg-[#006ee6] active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-xs min-w-[120px]">
+          <span>Tiếp tục</span>
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT STATE CONTROLLER (Allows toggling Frame 1, Frame 2, Frame 3 seamlessly) -->
+  <script>
+    function switchView(frameId) {
+      const uploadContainer = document.getElementById('upload-panel-container');
+      const previewContainer = document.getElementById('preview-panel-container');
+      const errorBanner = document.getElementById('error-banner');
+      const btnF1 = document.getElementById('btn-f1');
+      const btnF2 = document.getElementById('btn-f2');
+      const btnF3 = document.getElementById('btn-f3');
+      const btnContinue = document.getElementById('btn-continue');
+
+      // Reset button styles
+      [btnF1, btnF2, btnF3].forEach(b => {
+        b.className = "px-3 py-1 rounded-[6px] text-[13px] font-medium text-[rgba(60,60,67,0.7)] hover:text-black transition-all";
+      });
+
+      if (frameId === 'frame1') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.add('hidden');
+        btnF1.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame2') {
+        uploadContainer.classList.add('hidden');
+        previewContainer.classList.remove('hidden');
+        errorBanner.classList.add('hidden');
+        btnF2.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.remove('opacity-50', 'pointer-events-none');
+      } else if (frameId === 'frame3') {
+        uploadContainer.classList.remove('hidden');
+        previewContainer.classList.add('hidden');
+        errorBanner.classList.remove('hidden');
+        btnF3.className = "px-3 py-1 rounded-[6px] text-[13px] font-semibold bg-white text-black shadow-xs transition-all";
+        btnContinue.classList.add('opacity-50', 'pointer-events-none');
+      }
+    }
+
+    function dismissError() {
+      document.getElementById('error-banner').classList.add('hidden');
+    }
+
+    function handleContinue() {
+      alert("Chuyển sang Bước 2: Thông tin lâm sàng bệnh nhân.");
+    }
+
+    // Interactive file input simulator
+    document.getElementById('file-input').addEventListener('change', function(e) {
+      if (e.target.files && e.target.files[0]) {
+        switchView('frame2');
+      }
+    });
+
+    // Default initialize on Frame 1 (Drop zone view)
+    switchView('frame1');
+  </script>
+</body>
+</html>

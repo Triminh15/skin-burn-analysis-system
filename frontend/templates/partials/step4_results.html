@@ -1,0 +1,656 @@
+    <!-- ========================================================================= -->
+    <div id="view-step-4" class="step-view hidden flex flex-col gap-6">
+      
+      <!-- Top Title Bar & Context Actions -->
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-[28px] font-bold text-black tracking-tight leading-tight">Kết quả phân tích lâm sàng</h1>
+            <span id="badge-burn-degree-header" class="px-2.5 py-0.5 rounded-full text-[12px] font-bold bg-orange-100 text-orange-800 border border-orange-300">
+              Độ 2 (Partial Thickness)
+            </span>
+          </div>
+          <p class="text-[14px] text-[rgba(60,60,67,0.7)] mt-1 flex items-center gap-3 flex-wrap">
+            <span>Bệnh nhân: <strong id="res-patient-name" class="text-black font-semibold">Nguyễn Văn An</strong> (<span id="res-patient-meta">Nam · 34 tuổi · 68 kg</span>)</span>
+            <span class="text-gray-300">|</span>
+            <span>Mã ca: <strong id="res-session-code" class="text-black font-mono">BS-2024-0891</strong></span>
+            <span class="text-gray-300">|</span>
+            <span id="res-timestamp">12/11/2026 16:30</span>
+          </p>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="flex items-center gap-2.5">
+          <button onclick="goToStep(1)" class="h-10 px-5 rounded-xl bg-[#007AFF] hover:bg-[#006ee6] text-white font-semibold text-[13px] flex items-center gap-1.5 shadow-xs transition-all">
+            <span class="material-symbols-outlined text-[18px]">add_circle</span>
+            <span>Khám ca mới</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Urgent Alert Banner (Hiển thị khi cần Triage khẩn cấp) -->
+      <div id="urgent-triage-banner" class="hidden rounded-2xl bg-red-50 border border-red-200 p-4 shadow-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-red-600 text-white flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-[24px]">emergency</span>
+          </div>
+          <div class="flex-1">
+            <h4 id="urgent-triage-title" class="text-[15px] font-bold text-red-900">CẢNH BÁO TRIAGE LÂM SÀNG</h4>
+            <p id="urgent-triage-desc" class="text-[13px] text-red-800/90 mt-0.5">
+              Cần đánh giá kỹ lưỡng để có hướng can thiệp y tế phù hợp.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLINICAL RESULTS TAB SELECTOR (APPLE HIG 5-SEGMENT) -->
+      <div class="w-full">
+        <div class="p-1 rounded-xl bg-[rgba(120,120,128,0.12)] inline-flex w-full max-w-3xl overflow-x-auto">
+          <button onclick="switchResultTab('segmentation')" class="res-tab-btn active flex-1 py-2 px-3 rounded-lg bg-white text-black font-semibold text-[13px] shadow-xs text-center transition-all whitespace-nowrap" id="tab-btn-seg">
+            1. Phân đoạn & Diện tích
+          </button>
+          <button onclick="switchResultTab('depth')" class="res-tab-btn flex-1 py-2 px-3 rounded-lg text-gray-600 hover:text-black font-medium text-[13px] text-center transition-all whitespace-nowrap" id="tab-btn-depth">
+            2. Cấp độ sâu tổn thương
+          </button>
+          <button onclick="switchResultTab('gradcam')" class="res-tab-btn flex-1 py-2 px-3 rounded-lg text-gray-600 hover:text-black font-medium text-[13px] text-center transition-all whitespace-nowrap" id="tab-btn-gradcam">
+            3. XAI Grad-CAM
+          </button>
+          <button onclick="switchResultTab('parkland')" class="res-tab-btn flex-1 py-2 px-3 rounded-lg text-gray-600 hover:text-black font-medium text-[13px] text-center transition-all whitespace-nowrap" id="tab-btn-parkland">
+            4. Cấp cứu & Bù dịch
+          </button>
+          <button onclick="switchResultTab('recovery')" class="res-tab-btn flex-1 py-2 px-3 rounded-lg text-gray-600 hover:text-black font-medium text-[13px] text-center transition-all whitespace-nowrap" id="tab-btn-recovery">
+            5. Phục hồi & Chăm sóc
+          </button>
+        </div>
+      </div>
+
+      <!-- ========================================== -->
+      <!-- TAB 1: PHÂN ĐOẠN & DIỆN TÍCH TỔN THƯƠNG -->
+      <!-- ========================================== -->
+      <div id="res-tab-segmentation" class="res-tab-content grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT: MEDICAL PHOTO STAGE WITH INTERACTIVE COMPARISON SLIDER (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-3">
+          
+          <div class="relative w-full h-[500px] rounded-2xl bg-[#1C1C1E] overflow-hidden select-none flex items-center justify-center shadow-md border border-gray-800" id="viewer-container">
+            <!-- Mode 1: Split Slider -->
+            <div id="mode-split-container" class="relative w-full h-full flex items-center justify-center overflow-hidden">
+              <!-- Underneath: Original Image -->
+              <img id="img-slider-orig" src="" alt="Original Wound" class="absolute max-h-full max-w-full object-contain pointer-events-none">
+              
+              <!-- On top: Mask Overlay Layer with width clipped by slider -->
+              <div id="slider-mask-pane" class="absolute inset-0 overflow-hidden" style="width: 50%;">
+                <img id="img-slider-overlay" src="" alt="Overlay Wound" class="absolute h-full max-w-none object-contain pointer-events-none" style="width: 100%; height: 100%; object-fit: contain;">
+              </div>
+
+              <!-- Draggable Divider Line & Thumb -->
+              <div id="slider-divider" class="absolute top-0 bottom-0 w-[2px] bg-white cursor-ew-resize z-20 pointer-events-none" style="left: 50%;">
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white shadow-xl flex items-center justify-center text-blue-600 border-2 border-blue-600">
+                  <span class="material-symbols-outlined text-[18px]">code</span>
+                </div>
+              </div>
+
+              <!-- Invisible Range Input covering stage for smooth touch/drag -->
+              <input type="range" id="split-range-input" min="0" max="100" value="50" oninput="onSplitSliderChange(this.value)" class="absolute inset-0 opacity-0 cursor-ew-resize z-30 split-slider">
+            </div>
+
+            <!-- Mode 2: Static Single Image (when user clicks Contour / Overlay / ROI / Orig) -->
+            <img id="img-static-viewer" src="" alt="Clinical Visual" class="hidden max-h-full max-w-full object-contain pointer-events-none">
+
+            <!-- Floating Top Controls HUD -->
+            <div class="absolute top-4 left-4 right-4 z-40 flex items-center justify-between pointer-events-none">
+              <div class="pointer-events-auto p-1 rounded-xl bg-[rgba(28,28,30,0.75)] backdrop-blur-md flex items-center gap-1 shadow-md border border-white/10 text-white">
+                <button onclick="setViewerDisplayMode('split')" id="btn-mode-split" class="px-3 py-1 rounded-lg bg-white/25 text-white font-semibold text-[12px] transition-all">
+                  Thanh trượt
+                </button>
+                <button onclick="setViewerDisplayMode('overlay')" id="btn-mode-overlay" class="px-3 py-1 rounded-lg text-white/70 hover:text-white font-medium text-[12px] transition-all">
+                  Phủ màu đỏ
+                </button>
+                <button onclick="setViewerDisplayMode('contours')" id="btn-mode-contours" class="px-3 py-1 rounded-lg text-white/70 hover:text-white font-medium text-[12px] transition-all">
+                  Đường viền
+                </button>
+                <button onclick="setViewerDisplayMode('roi')" id="btn-mode-roi" class="px-3 py-1 rounded-lg text-white/70 hover:text-white font-medium text-[12px] transition-all">
+                  Vùng ROI
+                </button>
+                <button onclick="setViewerDisplayMode('orig')" id="btn-mode-orig" class="px-3 py-1 rounded-lg text-white/70 hover:text-white font-medium text-[12px] transition-all">
+                  Ảnh gốc
+                </button>
+              </div>
+
+              <div class="pointer-events-auto px-2.5 py-1 rounded-lg bg-emerald-700/80 text-white font-semibold text-[11px] backdrop-blur-md flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">verified</span>
+                <span>IoU: 94.2%</span>
+              </div>
+            </div>
+
+            <!-- Bottom Floating Caption -->
+            <div class="absolute bottom-3 left-4 right-4 z-40 flex items-center justify-between text-white/80 text-[11px] pointer-events-none">
+              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md">Kéo thanh trượt trái-phải để so sánh ảnh gốc và mặt nạ phân đoạn U-Net</span>
+              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md font-mono" id="viewer-res-dim">2048 × 1536 px</span>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- RIGHT: QUANTITATIVE MEASUREMENTS & TBSA CARD (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+          
+          <div class="inset-grouped p-5 flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b pb-3 border-gray-100">
+              <h3 class="text-[16px] font-bold text-gray-900">Số đo định lượng tổn thương</h3>
+              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">U-Net AI</span>
+            </div>
+
+            <!-- Inset List -->
+            <div class="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-200/60 border border-gray-200/60">
+              <!-- Row 1: Pixels -->
+              <div class="flex items-center justify-between p-3.5 bg-white">
+                <div class="flex flex-col">
+                  <span class="text-[13px] font-medium text-gray-900">Số pixel vết bỏng</span>
+                  <span class="text-[11px] text-gray-500">Mặt cắt nhị phân (Binary Mask)</span>
+                </div>
+                <span id="metric-burn-pixels" class="text-[15px] font-bold text-gray-900 tabular-nums">25.660 px</span>
+              </div>
+
+              <!-- Row 2: Frame Ratio -->
+              <div class="flex items-center justify-between p-3.5 bg-white">
+                <div class="flex flex-col">
+                  <span class="text-[13px] font-medium text-gray-900">Tỉ lệ trên khung hình</span>
+                  <span class="text-[11px] text-gray-500">% Diện tích vết bỏng / Toàn ảnh</span>
+                </div>
+                <span id="metric-frame-ratio" class="text-[16px] font-bold text-blue-600 tabular-nums">50,8 %</span>
+              </div>
+
+              <!-- Row 3: Real Area cm2 -->
+              <div class="flex items-center justify-between p-3.5 bg-white">
+                <div class="flex flex-col">
+                  <span class="text-[13px] font-medium text-gray-900">Diện tích quy đổi thực tế</span>
+                  <span id="metric-calib-hint" class="text-[11px] text-gray-500">Dựa theo thước đo (48,1 px/cm)</span>
+                </div>
+                <span id="metric-area-cm2" class="text-[18px] font-extrabold text-emerald-600 tabular-nums">11,1 cm²</span>
+              </div>
+
+              <!-- Row 4: % TBSA Wallace -->
+              <div class="flex items-center justify-between p-3.5 bg-blue-50/50">
+                <div class="flex flex-col">
+                  <span class="text-[14px] font-bold text-blue-900">Ước tính % TBSA cơ thể</span>
+                  <span id="metric-body-part-name" class="text-[11px] text-blue-700">Theo Luật số 9 (Cánh tay trái: 9%)</span>
+                </div>
+                <span id="metric-tbsa-pct" class="text-[22px] font-extrabold text-blue-700 tabular-nums">4,6 %</span>
+              </div>
+            </div>
+
+            <!-- Anatomical Wallace Quick Diagram Box -->
+            <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="material-symbols-outlined text-[28px] text-blue-600">accessibility_new</span>
+                <div>
+                  <span class="text-[13px] font-semibold text-gray-900 block" id="card-region-title">Vùng tổn thương: Cánh tay trái</span>
+                  <span class="text-[11px] text-gray-500">Chuẩn hóa theo phân vùng giải phẫu Wallace Quốc tế</span>
+                </div>
+              </div>
+              <span class="text-[13px] font-bold text-gray-800 bg-white px-2.5 py-1 rounded-lg border border-gray-200 tabular-nums" id="card-region-max-tbsa">
+                Tối đa 9%
+              </span>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 2: CẤP ĐỘ SÂU TỔN THƯƠNG (ResNet-34) -->
+      <!-- ========================================== -->
+      <div id="res-tab-depth" class="res-tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT: DEGREE SUMMARY & PROBABILITY DISTRIBUTION (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+          
+          <!-- Master Classification Card -->
+          <div class="inset-grouped p-6 flex flex-col gap-5">
+            <div class="flex items-center justify-between border-b pb-4 border-gray-100">
+              <div>
+                <span class="text-[12px] font-semibold text-gray-500 uppercase tracking-wider block">Phân loại mô hình AI ResNet-34</span>
+                <h2 id="card-degree-title" class="text-[24px] font-extrabold text-gray-900 mt-1">Độ 2 (Partial Thickness - Bỏng trung bì)</h2>
+              </div>
+              <div id="badge-degree-hero" class="w-14 h-14 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-[22px] shadow-xs">
+                II
+              </div>
+            </div>
+
+            <!-- Softmax Confidence Bar -->
+            <div>
+              <div class="flex justify-between items-center text-[13px] mb-1.5 font-medium">
+                <span class="text-gray-700">Độ tin cậy chẩn đoán (Softmax Certainty)</span>
+                <span id="metric-confidence" class="font-bold text-orange-600 tabular-nums">94,8 %</span>
+              </div>
+              <div class="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div id="bar-confidence" class="h-full bg-orange-500 rounded-full" style="width: 94.8%;"></div>
+              </div>
+            </div>
+
+            <!-- Low Confidence / Ethical Abstention Warning Box -->
+            <div id="box-low-confidence-warning" class="hidden p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 text-[13px] leading-relaxed">
+              <div class="flex items-center gap-2 font-bold text-amber-900 mb-1">
+                <span class="material-symbols-outlined text-[18px] text-amber-600">health_and_safety</span>
+                <span>CHỐT CHẶN ĐẠO ĐỨC Y HỌC (AI ABSTENTION)</span>
+              </div>
+              <p id="text-low-confidence-msg">Độ tin cậy của mô hình dưới ngưỡng an toàn (60%). Hệ thống từ chối khẳng định chẩn đoán để bảo đảm an toàn tính mạng cho người bệnh.</p>
+            </div>
+
+            <!-- 3-Class Probability Distribution -->
+            <div class="flex flex-col gap-3 pt-2">
+              <span class="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">Phân bố xác suất 3 cấp độ bỏng</span>
+              
+              <!-- Degree 1 -->
+              <div class="flex items-center gap-3">
+                <span class="w-28 text-[13px] font-medium text-gray-700">Độ 1 (Nông)</span>
+                <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div id="bar-prob-1" class="h-full bg-green-500 rounded-full" style="width: 14%;"></div>
+                </div>
+                <span id="label-prob-1" class="w-14 text-right text-[12px] font-semibold text-gray-700 tabular-nums">14,2%</span>
+              </div>
+
+              <!-- Degree 2 -->
+              <div class="flex items-center gap-3">
+                <span class="w-28 text-[13px] font-bold text-gray-900">Độ 2 (Dày 1 phần)</span>
+                <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div id="bar-prob-2" class="h-full bg-orange-500 rounded-full" style="width: 82%;"></div>
+                </div>
+                <span id="label-prob-2" class="w-14 text-right text-[12px] font-bold text-orange-600 tabular-nums">82,4%</span>
+              </div>
+
+              <!-- Degree 3 -->
+              <div class="flex items-center gap-3">
+                <span class="w-28 text-[13px] font-medium text-gray-700">Độ 3 (Toàn phần)</span>
+                <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div id="bar-prob-3" class="h-full bg-red-500 rounded-full" style="width: 3.4%;"></div>
+                </div>
+                <span id="label-prob-3" class="w-14 text-right text-[12px] font-semibold text-gray-700 tabular-nums">3,4%</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Medical Image ROI Cropped View -->
+          <div class="inset-grouped p-4 flex flex-col gap-3">
+            <span class="text-[13px] font-semibold text-gray-700 uppercase tracking-wide">Vùng cắt ROI tổn thương đầu vào ResNet-34</span>
+            <div class="w-full h-48 bg-[#1C1C1E] rounded-xl overflow-hidden flex items-center justify-center border border-gray-800">
+              <img id="img-roi-display" src="" alt="ROI Crop" class="max-h-full max-w-full object-contain">
+            </div>
+            <p class="text-[12px] text-gray-500 text-center">Ảnh ROI chuẩn hóa 224 × 224 px được trích xuất từ ranh giới Bounding Box của U-Net</p>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: CLINICAL PATHOLOGY DETAILS (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+          
+          <div class="inset-grouped p-5 flex flex-col gap-4">
+            <h3 class="text-[16px] font-bold text-gray-900 border-b pb-3 border-gray-100">Đặc điểm mô học & Tiên lượng</h3>
+
+            <div class="flex flex-col gap-3.5 text-[13px] text-gray-700 leading-relaxed">
+              <div class="p-3 rounded-xl bg-orange-50/60 border border-orange-200/60" id="box-pathology-desc">
+                <strong class="font-bold text-orange-950 block mb-1">Tổn thương lớp trung bì (Dermis):</strong>
+                <p id="text-pathology-detail">
+                  Xuất hiện các bọng nước chứa dịch huyết tương màu vàng chanh. Nền vết bỏng màu hồng ướt, nhạy cảm đau dữ dội khi chạm vào do các đầu mút thần kinh cảm giác bị kích thích trực tiếp.
+                </p>
+              </div>
+
+              <div class="inset-item px-0">
+                <span class="font-medium text-gray-600">Thời gian biểu mô hóa:</span>
+                <span class="font-bold text-gray-900" id="text-healing-time">10 - 21 ngày</span>
+              </div>
+
+              <div class="inset-item px-0">
+                <span class="font-medium text-gray-600">Nguy cơ sẹo phì đại / co kéo:</span>
+                <span class="font-bold text-amber-700" id="text-scar-risk">Trung bình (Thấp nếu chăm sóc tốt)</span>
+              </div>
+
+              <div class="inset-item px-0">
+                <span class="font-medium text-gray-600">Cảm giác đau:</span>
+                <span class="font-bold text-red-600" id="text-pain-level">Đau buốt dữ dội (Tăng cảm giác)</span>
+              </div>
+            </div>
+
+            <!-- Doctor Note Box -->
+            <div class="mt-2 p-3 rounded-xl bg-gray-50 border border-gray-200 text-[12px] text-gray-600">
+              <strong class="text-gray-900 block mb-0.5">Khuyến cáo bác sĩ:</strong>
+              Giữ nguyên vẹn màng bọng nước. Dùng băng vô khuẩn tẩm kem Silvadene 1% hoặc gạc mỡ kháng sinh để hỗ trợ quá trình biểu mô hóa tự nhiên.
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 3: XAI GRAD-CAM (GIẢI THÍCH MÔ HÌNH) -->
+      <!-- ========================================== -->
+      <div id="res-tab-gradcam" class="res-tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT: GRAD-CAM MEDICAL HEATMAP STAGE (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-3">
+          
+          <div class="relative w-full h-[500px] rounded-2xl bg-[#1C1C1E] overflow-hidden select-none flex items-center justify-center shadow-md border border-gray-800">
+            <!-- Heatmap Image -->
+            <img id="img-gradcam-display" src="" alt="Grad-CAM Heatmap" class="max-h-full max-w-full object-contain pointer-events-none">
+
+            <!-- Floating Top HUD -->
+            <div class="absolute top-4 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+              <div class="px-3 py-1.5 rounded-xl bg-[rgba(28,28,30,0.78)] backdrop-blur-md text-white font-medium text-[12px] flex items-center gap-2 border border-white/10 shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                <span>Grad-CAM Activation: Layer4 (Conv5_x)</span>
+              </div>
+              <div class="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md text-white/90 text-[11px] font-mono">
+                ResNet-34 Feature Map
+              </div>
+            </div>
+
+            <!-- Heatmap Gradient Legend on Right Edge -->
+            <div class="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex items-center gap-2 pointer-events-none select-none">
+              <div class="flex flex-col justify-between h-[180px] text-right text-[10px] font-bold text-white drop-shadow">
+                <span>1.0 (Cao)</span>
+                <span>0.75</span>
+                <span>0.50</span>
+                <span>0.25</span>
+                <span>0.0 (Thấp)</span>
+              </div>
+              <div class="w-3 h-[180px] rounded-full border border-white/30 p-0.5 bg-black/40 backdrop-blur-sm">
+                <div class="w-full h-full rounded-full" style="background: linear-gradient(to bottom, #FF3B30 0%, #FF9500 25%, #FFCC00 45%, #34C759 68%, #007AFF 88%, #5856D6 100%);"></div>
+              </div>
+            </div>
+
+            <!-- Bottom Floating Description -->
+            <div class="absolute bottom-3 left-4 right-4 z-20 flex justify-between items-center text-white/80 text-[11px] pointer-events-none">
+              <span class="px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md">Vùng màu đỏ cam thể hiện trọng tâm nơ-ron kích hoạt mạnh nhất</span>
+              <span class="px-2 py-0.5 rounded bg-black/60 backdrop-blur-md font-mono">Softmax Score: 0.948</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: XAI EXPLANABILITY REPORT (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+          
+          <div class="inset-grouped p-5 flex flex-col gap-4">
+            <h3 class="text-[16px] font-bold text-gray-900 border-b pb-3 border-gray-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-blue-600 text-[20px]">psychology</span>
+              <span>Giải thích quyết định của AI (XAI)</span>
+            </h3>
+
+            <div class="flex flex-col gap-3 text-[13px] text-gray-700 leading-relaxed">
+              <p>
+                <strong>Bản đồ kích hoạt Gradient (Grad-CAM):</strong> Sử dụng gradient dòng chảy ngược tại tầng tích chập cuối cùng (<code>conv5_x</code>) của mạng ResNet-34 để định vị các điểm ảnh có ảnh hưởng quyết định đến phân loại cấp độ bỏng.
+              </p>
+
+              <div class="p-3 rounded-xl bg-blue-50/70 border border-blue-200/60 text-blue-900">
+                <strong class="font-bold block mb-1">Phát hiện trọng tâm lâm sàng:</strong>
+                <p>
+                  Mô hình tập trung kích hoạt mạnh nhất (vùng đỏ) tại các bọng nước vỡ rỉ dịch và vùng bờ ranh giới mô xung huyết viêm đỏ, phản ánh chính xác triệu chứng điển hình của bỏng độ II.
+                </p>
+              </div>
+
+              <div class="inset-item px-0">
+                <span class="text-gray-600">Độ tập trung vào tổn thương:</span>
+                <span class="font-bold text-emerald-700">96,4% trên vùng vết thương</span>
+              </div>
+
+              <div class="inset-item px-0">
+                <span class="text-gray-600">Nhiễu nền phông ảnh:</span>
+                <span class="font-bold text-gray-900">&lt; 3,6% (Không bị ảnh hưởng nền)</span>
+              </div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-gray-50 border border-gray-200 text-[12px] text-gray-600">
+              <strong class="text-gray-900 block mb-0.5">Giá trị lâm sàng:</strong>
+              Giúp bác sĩ xác thực mô hình không bị "học vẹt" từ các chi tiết ngoại cảnh (như màu găng tay, vải trải giường hay thước đo) mà thực sự tập trung vào vùng bệnh học của da.
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 4: CẤP CỨU & BÙ DỊCH (PARKLAND PROTOCOL) -->
+      <!-- ========================================== -->
+      <div id="res-tab-parkland" class="res-tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT: FLUID INFUSION VOLUME & TIMELINE (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+          
+          <!-- Master Fluid Plan Card -->
+          <div class="inset-grouped p-6 flex flex-col gap-5">
+            <div class="flex items-center justify-between border-b pb-4 border-gray-100">
+              <div>
+                <span class="text-[12px] font-semibold text-gray-500 uppercase tracking-wider block">Phác đồ bù dịch Parkland (Ringer Lactate)</span>
+                <h3 class="text-[20px] font-bold text-gray-900 mt-0.5" id="parkland-status-heading">Tổng lượng dịch truyền trong 24 giờ đầu</h3>
+              </div>
+              <div class="text-right">
+                <span id="parkland-total-ml" class="text-[28px] font-extrabold text-[#007AFF] tabular-nums block">1.243 ml</span>
+                <span id="parkland-fluid-type-label" class="text-[12px] text-gray-500 font-medium">Dung dịch Ringer Lactate</span>
+              </div>
+            </div>
+
+            <!-- Clinical Indication Notice Box -->
+            <div id="parkland-indication-alert" class="p-3.5 rounded-xl border text-[13px] leading-relaxed hidden">
+              <!-- Dynamically populated by viewer.js -->
+            </div>
+
+            <!-- Inset Phase Division -->
+            <div id="parkland-phase-container" class="bg-gray-50 rounded-xl overflow-hidden divide-y divide-gray-200/60 border border-gray-200/60">
+              <!-- Phase 1: 8 hours -->
+              <div class="p-4 bg-white flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-[#007AFF]"></span>
+                    <span class="text-[14px] font-bold text-gray-900">8 giờ đầu</span>
+                    <span class="text-[12px] text-gray-500">(tính từ thời điểm bị bỏng)</span>
+                  </div>
+                  <span id="parkland-time-subtext" class="text-[11px] text-orange-600 font-semibold block mt-1">
+                    Đã tiêu tốn 2h · Còn lại 6h để hoàn thành 50% lượng dịch
+                  </span>
+                </div>
+                <div class="text-right">
+                  <span id="parkland-8h-ml" class="text-[18px] font-extrabold text-gray-900 tabular-nums block">621,5 ml</span>
+                  <span id="parkland-rate-8h" class="text-[13px] font-bold text-blue-600 tabular-nums">77,7 ml/giờ (~26 giọt/phút)</span>
+                </div>
+              </div>
+
+              <!-- Phase 2: Next 16 hours -->
+              <div class="p-4 bg-white flex items-center justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-blue-300"></span>
+                    <span class="text-[14px] font-bold text-gray-900">16 giờ tiếp theo</span>
+                    <span class="text-[12px] text-gray-500">(duy trì huyết động)</span>
+                  </div>
+                  <span class="text-[11px] text-gray-400 block mt-1">Truyền đều 50% thể tích còn lại</span>
+                </div>
+                <div class="text-right">
+                  <span id="parkland-16h-ml" class="text-[18px] font-extrabold text-gray-900 tabular-nums block">621,5 ml</span>
+                  <span id="parkland-rate-16h" class="text-[13px] font-bold text-gray-600 tabular-nums">38,8 ml/giờ (~13 giọt/phút)</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 24-HOUR CLINICAL TIMELINE BAR -->
+            <div class="space-y-2 pt-2">
+              <div class="flex justify-between items-center text-[12px] font-medium text-gray-600">
+                <span class="flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[16px] text-blue-600">history_toggle_off</span>
+                  <span>Lộ trình truyền dịch 24 giờ</span>
+                </span>
+                <span id="parkland-elapsed-pill" class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[11px] font-bold tabular-nums">Đã qua: 2h</span>
+              </div>
+
+              <div class="relative w-full h-[18px] rounded-full bg-gray-200 overflow-hidden flex shadow-inner">
+                <!-- Phase 1 bar (50%) -->
+                <div class="w-1/2 h-full bg-blue-100 relative flex items-center">
+                  <div id="bar-parkland-elapsed" class="h-full bg-[#007AFF] flex items-center justify-end px-1" style="width: 25%;">
+                    <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                  </div>
+                </div>
+                <!-- Divider -->
+                <div class="w-[2px] h-full bg-blue-400 z-10"></div>
+                <!-- Phase 2 bar (50%) -->
+                <div class="w-1/2 h-full bg-blue-50/80"></div>
+              </div>
+
+              <div class="flex justify-between text-[11px] text-gray-500 tabular-nums pt-0.5">
+                <span>0h (Bắt đầu bỏng)</span>
+                <span class="font-bold text-blue-700">8h (Xong 50%)</span>
+                <span>24h (Hoàn tất phác đồ)</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- RIGHT: CLINICAL MONITORING CHECKLIST (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+          
+          <div class="inset-grouped p-5 flex flex-col gap-4">
+            <h3 class="text-[16px] font-bold text-gray-900 border-b pb-3 border-gray-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-red-600 text-[20px]">monitor_heart</span>
+              <span>Theo dõi cấp cứu chống sốc</span>
+            </h3>
+
+            <div class="flex flex-col gap-3 text-[13px] text-gray-700 leading-relaxed">
+              <!-- Metric 1: Urine output -->
+              <div class="p-3 rounded-xl bg-blue-50/70 border border-blue-200/60 flex items-start gap-3">
+                <span class="material-symbols-outlined text-blue-600 text-[20px] shrink-0 mt-0.5">water_drop</span>
+                <div>
+                  <strong class="text-blue-950 font-bold block">Mục tiêu nước tiểu (Foley catheter):</strong>
+                  <span class="text-blue-900 text-[12px]">Duy trì <strong>0.5 - 1.0 ml/kg/giờ</strong> (tương đương 35 - 70 ml/h với người 68kg). Nếu &lt; 30ml/h tăng 20% tốc độ truyền.</span>
+                </div>
+              </div>
+
+              <!-- Metric 2: Vital signs -->
+              <div class="p-3 rounded-xl bg-gray-50 border border-gray-200 flex items-start gap-3">
+                <span class="material-symbols-outlined text-gray-600 text-[20px] shrink-0 mt-0.5">vital_signs</span>
+                <div>
+                  <strong class="text-gray-900 font-bold block">Sinh hiệu & Huyết động:</strong>
+                  <span class="text-gray-600 text-[12px]">Huyết áp tâm thu &gt; 90 mmHg, nhịp tim &lt; 110 ck/phút, tri giác tỉnh táo, ấm đầu chi.</span>
+                </div>
+              </div>
+
+              <!-- Metric 3: Hypothermia prevention -->
+              <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200/60 flex items-start gap-3">
+                <span class="material-symbols-outlined text-amber-600 text-[20px] shrink-0 mt-0.5">device_thermostat</span>
+                <div>
+                  <strong class="text-amber-950 font-bold block">Phòng chống hạ thân nhiệt:</strong>
+                  <span class="text-amber-900 text-[12px]">Đắp chăn ấm, duy trì nhiệt độ phòng cấp cứu 28°C - 30°C. Tuyệt đối không ngâm lạnh vết thương kéo dài.</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- ========================================== -->
+      <!-- TAB 5: PHỤC HỒI & CHĂM SÓC VẾT THƯƠNG -->
+      <!-- ========================================== -->
+      <div id="res-tab-recovery" class="res-tab-content hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <div class="lg:col-span-8 flex flex-col gap-4">
+          <!-- Ethical Abstention Warning Banner on Tab 5 -->
+          <div id="tab5-abstention-banner" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 shadow-xs">
+            <div class="flex items-start gap-3">
+              <span class="material-symbols-outlined text-amber-600 text-[26px] shrink-0 mt-0.5">health_and_safety</span>
+              <div>
+                <h4 class="font-bold text-amber-900 text-[15px]">KHUYẾN CÁO ĐẠO ĐỨC Y KHOA: KHÔNG TỰ ĐIỀU TRỊ TẠI NHÀ</h4>
+                <p class="text-[13px] text-amber-900/90 mt-1 leading-relaxed">
+                  Độ tin cậy của AI dưới 60% (chất lượng ảnh chụp mờ hoặc tổn thương ở ranh giới phức tạp). Để tránh dùng sai thuốc gây nhiễm trùng hoặc hoại tử sâu, người bệnh <strong>tuyệt đối không tự điều trị theo mẹo dân gian</strong> mà cần đến cơ sở y tế gần nhất để bác sĩ chuyên khoa thăm khám trực tiếp.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="inset-grouped p-6 flex flex-col gap-4">
+            <h3 class="text-[18px] font-bold text-gray-900 border-b pb-3 border-gray-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-600 text-[22px]">healing</span>
+              <span>Phác đồ Chăm sóc & Điều trị Vết bỏng Chuẩn Bộ Y tế</span>
+            </h3>
+
+            <!-- 4-step care plan -->
+            <div class="space-y-4 text-[13px] text-gray-700">
+              
+              <div class="flex items-start gap-3.5 p-3.5 rounded-xl bg-gray-50 border border-gray-200">
+                <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[13px] shrink-0 mt-0.5">1</div>
+                <div>
+                  <strong class="text-gray-900 font-bold text-[14px] block mb-1">Làm sạch & Sát trùng nhẹ nhàng:</strong>
+                  <p class="leading-relaxed">Rửa nhẹ nhàng bề mặt tổn thương bằng dung dịch Nước muối sinh lý NaCl 0.9% hoặc dung dịch Betadine pha loãng 1/10. Dùng gạc mềm thấm khô, không chà xát mạnh làm trợt biểu mô non.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3.5 p-3.5 rounded-xl bg-red-50 border border-red-200">
+                <div class="w-7 h-7 rounded-full bg-red-600 text-white flex items-center justify-center font-bold text-[13px] shrink-0 mt-0.5">2</div>
+                <div>
+                  <strong class="text-red-950 font-bold text-[14px] block mb-1">Xử trí Bọng nước (Phỏng nước):</strong>
+                  <p class="text-red-900 leading-relaxed"><strong>TUYỆT ĐỐI KHÔNG TỰ Ý CHỌC VỠ BỌNG NƯỚC.</strong> Lớp da bóng nước là màng sinh học vô trùng che chở trung bì. Chỉ chọc hút dịch bằng kim vô trùng khi bóng nước quá căng hoặc dịch chuyển màu đục nghi nhiễm trùng.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3.5 p-3.5 rounded-xl bg-gray-50 border border-gray-200">
+                <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[13px] shrink-0 mt-0.5">3</div>
+                <div>
+                  <strong class="text-gray-900 font-bold text-[14px] block mb-1">Thuốc bôi tại chỗ & Băng bó:</strong>
+                  <p class="leading-relaxed">Thoa lớp kem mỏng <strong>Silver Sulfadiazine 1% (Silvadene)</strong> hoặc kem mỡ Panthenol. Phủ gạc vô trùng không dính (Urgotul / Bactigras), băng nhẹ nhàng không siết chặt.</p>
+                </div>
+              </div>
+
+              <div class="flex items-start gap-3.5 p-3.5 rounded-xl bg-gray-50 border border-gray-200">
+                <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[13px] shrink-0 mt-0.5">4</div>
+                <div>
+                  <strong class="text-gray-900 font-bold text-[14px] block mb-1">Phục hồi chức năng & Chống co rút sẹo:</strong>
+                  <p class="leading-relaxed">Kê cao chi tổn thương để giảm phù nề. Bắt đầu tập vận động nhẹ nhàng các khớp liên quan sau 48 giờ. Khi vết thương liền sẹo, sử dụng gel silicone bôi sẹo và băng ép chống sẹo lồi.</p>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+        <div class="lg:col-span-4 flex flex-col gap-4">
+          <div class="inset-grouped p-5 flex flex-col gap-3.5">
+            <h4 class="text-[15px] font-bold text-gray-900 border-b pb-2.5 border-gray-100 flex items-center gap-2">
+              <span class="material-symbols-outlined text-amber-500 text-[20px]">restaurant</span>
+              <span>Dinh dưỡng phục hồi</span>
+            </h4>
+            <ul class="text-[13px] text-gray-700 space-y-2 leading-relaxed">
+              <li class="flex items-start gap-2">
+                <span class="material-symbols-outlined text-green-600 text-[16px] shrink-0 mt-0.5">check</span>
+                <span><strong>Giàu Protein (1.5 - 2g/kg/ngày):</strong> Thịt nạc, trứng, cá, sữa để tái tạo mô biểu bì.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="material-symbols-outlined text-green-600 text-[16px] shrink-0 mt-0.5">check</span>
+                <span><strong>Vitamin C & Kẽm:</strong> Cam, bưởi, ớt chuông giúp tổng hợp collagen lành sẹo nhanh.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="material-symbols-outlined text-red-500 text-[16px] shrink-0 mt-0.5">close</span>
+                <span><strong>Hạn chế:</strong> Rượu bia, thuốc lá, đồ cay nóng gây kích ứng mạch máu.</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+

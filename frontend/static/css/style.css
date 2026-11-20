@@ -1,0 +1,215 @@
+/**
+ * BurnScan Clinical System - Apple HIG Styling
+ * Design System Specification from DESIGN.md
+ */
+
+:root {
+  /* Apple System Colors */
+  --app-bg: #F2F2F7;
+  --surface: #FFFFFF;
+  --surface-dim: #D9DADE;
+  --surface-stage: #1C1C1E;
+  --surface-border: #2C2C2E;
+
+  /* Typography Colors */
+  --text-primary: #000000;
+  --text-secondary: rgba(60, 60, 67, 0.60);
+  --text-tertiary: rgba(60, 60, 67, 0.30);
+  --separator: rgba(60, 60, 67, 0.18);
+  --control-fill: rgba(120, 120, 128, 0.12);
+
+  /* Clinical Status & Grade Tints */
+  --accent: #007AFF;
+  --accent-tint: rgba(0, 122, 255, 0.12);
+  --grade-ok: #248A3D;
+  --grade-ok-tint: rgba(52, 199, 89, 0.12);
+  --grade-warn: #C93400;
+  --grade-warn-tint: rgba(255, 149, 0, 0.12);
+  --grade-error: #D70015;
+  --grade-error-tint: rgba(255, 59, 48, 0.12);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", sans-serif;
+  background-color: var(--app-bg);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+  padding: 0;
+}
+
+/* Monospaced Figures for Telemetry & Medical Metrics */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Apple Material Frosted Glass
+   ========================================================================== */
+.glass-light {
+  background: rgba(249, 249, 249, 0.82);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.glass-bottom {
+  background: rgba(249, 249, 249, 0.85);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-top: 0.5px solid var(--separator);
+}
+
+.dark-glass-toolbar {
+  background: rgba(28, 28, 30, 0.72);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ==========================================================================
+   Apple Segmented Controls
+   ========================================================================== */
+.segmented-control {
+  background: rgba(120, 120, 128, 0.14);
+  border-radius: 9px;
+  padding: 2px;
+  display: inline-flex;
+}
+
+.segmented-btn {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.segmented-btn.active {
+  background: #FFFFFF;
+  color: #000000;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0.5px 0.5px rgba(0, 0, 0, 0.04);
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Apple Inset Grouped Lists & Cards
+   ========================================================================== */
+.inset-grouped {
+  background: #FFFFFF;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 0.5px 1.5px rgba(0, 0, 0, 0.04);
+  border: 0.5px solid rgba(0, 0, 0, 0.04);
+}
+
+.inset-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 16px;
+  position: relative;
+}
+
+.inset-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 52px;
+  right: 0;
+  height: 0.5px;
+  background: var(--separator);
+}
+
+/* ==========================================================================
+   Interactive Upload Dropzone
+   ========================================================================== */
+.dropzone-dashed {
+  border: 1.5px dashed #C7C7CC;
+  transition: all 0.2s ease;
+}
+
+.dropzone-dashed:hover {
+  border-color: #007AFF;
+  background-color: rgba(0, 122, 255, 0.02);
+}
+
+/* ==========================================================================
+   Interactive Split Comparison Slider
+   ========================================================================== */
+.split-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  cursor: ew-resize;
+  border: 2px solid #007AFF;
+}
+
+.split-slider::-moz-range-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  cursor: ew-resize;
+  border: 2px solid #007AFF;
+}
+
+/* ==========================================================================
+   Interactive Caliper Knobs
+   ========================================================================== */
+.caliper-knob {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #FFD60A;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  transform: translate(-50%, -50%);
+  transition: transform 0.1s ease;
+  z-index: 30;
+}
+
+.caliper-knob:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.caliper-knob-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #000000;
+}
+
+/* ==========================================================================
+   Custom Scrollbar
+   ========================================================================== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+

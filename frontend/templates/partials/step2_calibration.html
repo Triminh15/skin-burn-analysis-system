@@ -1,0 +1,236 @@
+    <!-- ========================================================================= -->
+    <div id="view-step-2" class="step-view hidden flex flex-col gap-6">
+      
+      <!-- Top Title Bar -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 class="text-[28px] font-bold text-black tracking-tight leading-tight">Thông tin ca bệnh & Hiệu chuẩn</h1>
+          <p class="text-[15px] text-[rgba(60,60,67,0.7)] mt-0.5">
+            Xác định kích thước thực tế và vùng cơ thể theo Luật số 9 Wallace để tính toán chính xác % TBSA và dịch truyền Parkland.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="goToStep(1)" class="h-9 px-3 rounded-lg border border-gray-300 text-gray-700 font-medium text-[13px] hover:bg-gray-50 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+            <span>Đổi ảnh khác</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Split Layout: 60% Left Stage, 40% Right Form -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- LEFT COLUMN: MEDICAL VIEWPORT & CALIBRATION STAGE (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+          
+          <!-- Photo Stage Container with Draggable Caliper Overlay -->
+          <div class="relative w-full h-[480px] bg-[#1C1C1E] rounded-2xl overflow-hidden shadow-md flex items-center justify-center select-none group border border-gray-800" id="calib-stage-wrapper">
+            <!-- Uploaded Image -->
+            <img id="img-calib-canvas" src="" alt="Calibration Stage" class="max-h-full max-w-full object-contain pointer-events-none select-none">
+            
+            <!-- Dark Vignette Overlay -->
+            <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/30 pointer-events-none"></div>
+
+            <!-- Floating Top Toolbar (Apple Dark Glass HUD) -->
+            <div class="absolute top-4 left-4 right-4 flex items-center justify-between z-20 pointer-events-auto">
+              <div class="flex items-center gap-1.5 p-1 rounded-xl bg-[rgba(28,28,30,0.78)] backdrop-blur-[20px] border border-white/10 shadow-sm text-white">
+                <button onclick="resetCaliper()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/20 text-white font-medium text-[12px] hover:bg-white/30 transition-all">
+                  <span class="material-symbols-outlined text-[16px]">straighten</span>
+                  <span>Đặt lại thước đo</span>
+                </button>
+                <button onclick="toggleCaliperVisibility()" id="btn-toggle-caliper" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-white/80 hover:text-white font-medium text-[12px] hover:bg-white/10 transition-all">
+                  <span class="material-symbols-outlined text-[16px]">visibility</span>
+                  <span>Ẩn/Hiện thước</span>
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[rgba(28,28,30,0.78)] backdrop-blur-[20px] border border-white/10 text-white/90 text-[12px] shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="calib-pixel-dist">Độ dài: 250 px</span>
+              </div>
+            </div>
+
+            <!-- INTERACTIVE SVG CALIPER (Crisp Yellow HIG Line & Knobs) -->
+            <div class="absolute inset-0 z-10" id="caliper-overlay">
+              <svg class="w-full h-full pointer-events-none" id="caliper-svg">
+                <!-- Measurement Line -->
+                <line id="svg-calip-line" x1="120" y1="240" x2="380" y2="240" stroke="#FFD60A" stroke-width="2.5" stroke-linecap="round"></line>
+                <!-- Caliper tick marks -->
+                <line id="svg-calip-tick1" x1="120" y1="228" x2="120" y2="252" stroke="#FFD60A" stroke-width="2.5"></line>
+                <line id="svg-calip-tick2" x1="380" y1="228" x2="380" y2="252" stroke="#FFD60A" stroke-width="2.5"></line>
+              </svg>
+
+              <!-- Knob 1 (Start Handle) -->
+              <div id="knob-1" class="absolute w-6 h-6 rounded-full bg-[#FFD60A] shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 transition-transform -translate-x-1/2 -translate-y-1/2" style="left: 120px; top: 240px;">
+                <div class="w-2 h-2 rounded-full bg-black"></div>
+              </div>
+
+              <!-- Knob 2 (End Handle) -->
+              <div id="knob-2" class="absolute w-6 h-6 rounded-full bg-[#FFD60A] shadow-lg flex items-center justify-center cursor-grab active:cursor-grabbing hover:scale-110 transition-transform -translate-x-1/2 -translate-y-1/2" style="left: 380px; top: 240px;">
+                <div class="w-2 h-2 rounded-full bg-black"></div>
+              </div>
+            </div>
+
+            <!-- Bottom Floating Guidance -->
+            <div class="absolute bottom-3 left-4 right-4 flex justify-between items-center text-white/90 text-[12px] pointer-events-none">
+              <span class="px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md">Kéo hai núm vàng vào hai đầu vật chuẩn (CCCD / Thước / Đồng xu)</span>
+              <span class="px-2 py-0.5 rounded bg-black/60 backdrop-blur-md font-mono" id="calib-ratio-pill">-- px/cm</span>
+            </div>
+          </div>
+
+          <!-- Calibration Reference Presets & Derived Ratio -->
+          <div class="inset-grouped p-4 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] font-semibold text-gray-700 uppercase tracking-wide">Vật mẫu chuẩn tham chiếu</span>
+              <span class="text-[12px] text-blue-600 font-medium">Bấm để tự áp dụng</span>
+            </div>
+
+            <!-- Preset Chips -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button onclick="setCalibPreset(8.56, 'Căn cước công dân (CCCD)')" class="p-2.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all preset-btn active bg-blue-50 border-blue-500" data-val="8.56">
+                <span class="block text-[11px] text-gray-500">Thẻ CCCD / BHYT</span>
+                <span class="block text-[14px] font-bold text-gray-900 tabular-nums">8,56 cm</span>
+              </button>
+              <button onclick="setCalibPreset(10.0, 'Thước chuẩn 10cm')" class="p-2.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all preset-btn" data-val="10.0">
+                <span class="block text-[11px] text-gray-500">Thước y tế</span>
+                <span class="block text-[14px] font-bold text-gray-900 tabular-nums">10,0 cm</span>
+              </button>
+              <button onclick="setCalibPreset(2.55, 'Đồng xu 5.000đ')" class="p-2.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all preset-btn" data-val="2.55">
+                <span class="block text-[11px] text-gray-500">Đồng xu 5.000đ</span>
+                <span class="block text-[14px] font-bold text-gray-900 tabular-nums">2,55 cm</span>
+              </button>
+              <button onclick="setCalibPreset(null, 'Nhập thủ công')" class="p-2.5 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all preset-btn" data-val="custom">
+                <span class="block text-[11px] text-gray-500">Tùy biến</span>
+                <span class="block text-[14px] font-bold text-gray-900">Tự nhập cm</span>
+              </button>
+            </div>
+
+            <!-- Inset Grouped Details -->
+            <div class="bg-gray-50 rounded-xl p-3 border border-gray-200/60 flex flex-col sm:flex-row items-center justify-between gap-3 mt-1">
+              <div class="flex items-center gap-2">
+                <label for="input-real-dimension" class="text-[13px] font-medium text-gray-700">Chiều dài thực tế:</label>
+                <div class="relative w-28">
+                  <input type="number" id="input-real-dimension" step="0.01" value="8.56" oninput="recomputeRatio()" class="w-full px-2.5 py-1.5 text-[14px] font-bold text-right rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums">
+                  <span class="absolute right-2 top-2 text-[11px] text-gray-400">cm</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-[13px] text-gray-600 font-medium">Tỷ lệ quy đổi:</span>
+                <span id="label-derived-ratio" class="text-[16px] font-bold text-blue-600 tabular-nums">48,1 px/cm</span>
+                <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-semibold flex items-center gap-0.5">
+                  <span class="material-symbols-outlined text-[13px]">lock</span>
+                  Đã khóa
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: PATIENT CLINICAL FORM & RULE OF NINES (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-5">
+          
+          <!-- ANATOMICAL BODY PART (RULE OF NINES WALLACE) -->
+          <div class="inset-grouped p-4 flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="text-[13px] font-semibold text-gray-700 uppercase tracking-wide">Vùng cơ thể (Luật số 9 Wallace)</span>
+              <span class="text-[11px] px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold">TBSA Factor</span>
+            </div>
+
+            <!-- Anatomical Selector Dropdown -->
+            <select id="select-body-part" onchange="onBodyPartChange(this.value)" class="w-full px-3 py-2.5 rounded-xl border border-gray-300 text-[14px] font-medium text-gray-900 bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <option value="chest_abdomen" selected>Ngực & Bụng trước (18% TBSA)</option>
+              <option value="back_buttocks">Lưng & Mông sau (18% TBSA)</option>
+              <option value="left_arm">Cánh tay trái (9% TBSA)</option>
+              <option value="right_arm">Cánh tay phải (9% TBSA)</option>
+              <option value="left_leg">Đùi & Cẳng chân trái (18% TBSA)</option>
+              <option value="right_leg">Đùi & Cẳng chân phải (18% TBSA)</option>
+              <option value="head_neck">Đầu - Mặt - Cổ (9% TBSA)</option>
+              <option value="perineum">Bộ phận sinh dục (1% TBSA)</option>
+            </select>
+
+            <!-- Quick Region Chips -->
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              <button onclick="setBodyPart('chest_abdomen')" class="px-2.5 py-1 rounded-lg text-[12px] bg-blue-50 text-blue-700 border border-blue-200 font-medium">Ngực-Bụng (18%)</button>
+              <button onclick="setBodyPart('left_arm')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Tay T (9%)</button>
+              <button onclick="setBodyPart('right_arm')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Tay P (9%)</button>
+              <button onclick="setBodyPart('left_leg')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Chân T (18%)</button>
+              <button onclick="setBodyPart('right_leg')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Chân P (18%)</button>
+              <button onclick="setBodyPart('back_buttocks')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Lưng-Mông (18%)</button>
+              <button onclick="setBodyPart('head_neck')" class="px-2.5 py-1 rounded-lg text-[12px] bg-gray-100 text-gray-700 hover:bg-gray-200 font-medium">Đầu-Mặt (9%)</button>
+            </div>
+          </div>
+
+          <!-- PATIENT CLINICAL DATA FORM -->
+          <div class="inset-grouped p-4 flex flex-col gap-3.5">
+            <span class="text-[13px] font-semibold text-gray-700 uppercase tracking-wide">Hồ sơ bệnh nhân lâm sàng</span>
+
+            <!-- Patient Name -->
+            <div>
+              <label for="input-patient-name" class="block text-[12px] font-medium text-gray-600 mb-1">Họ và tên bệnh nhân</label>
+              <input type="text" id="input-patient-name" value="Nguyễn Văn An" placeholder="vd: Trần Văn B" class="w-full px-3 py-2 text-[14px] rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            </div>
+
+            <!-- Age & Gender -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="input-patient-age" class="block text-[12px] font-medium text-gray-600 mb-1">Tuổi</label>
+                <input type="number" id="input-patient-age" value="34" min="1" max="120" class="w-full px-3 py-2 text-[14px] rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums">
+              </div>
+              <div>
+                <label for="input-patient-gender" class="block text-[12px] font-medium text-gray-600 mb-1">Giới tính</label>
+                <select id="input-patient-gender" class="w-full px-3 py-2 text-[14px] rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+                  <option value="Nam" selected>Nam</option>
+                  <option value="Nữ">Nữ</option>
+                  <option value="Khác">Khác</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Weight & Burn Elapsed Time (Crucial for Parkland Protocol) -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="input-patient-weight" class="block text-[12px] font-medium text-gray-600 mb-1">Cân nặng (kg) <span class="text-red-500">*</span></label>
+                <div class="relative">
+                  <input type="number" id="input-patient-weight" value="68.0" step="0.5" min="5" max="250" class="w-full px-3 py-2 text-[14px] rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums font-semibold">
+                  <span class="absolute right-2.5 top-2 text-[12px] text-gray-400">kg</span>
+                </div>
+              </div>
+              <div>
+                <label for="input-burn-time" class="block text-[12px] font-medium text-gray-600 mb-1">Thời gian từ khi bỏng</label>
+                <div class="relative">
+                  <input type="number" id="input-burn-time" value="2.0" step="0.5" min="0.1" max="48" class="w-full px-3 py-2 text-[14px] rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none tabular-nums">
+                  <span class="absolute right-2.5 top-2 text-[12px] text-gray-400">giờ</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Clinical Hint for Parkland -->
+            <div class="p-3 rounded-xl bg-amber-50/70 border border-amber-200/60 text-[12px] text-amber-900 flex items-start gap-2">
+              <span class="material-symbols-outlined text-[18px] text-amber-600 shrink-0 mt-0.5">info</span>
+              <span><strong>Phác đồ Parkland:</strong> Yêu cầu cân nặng chính xác để tính tổng dịch truyền Ringer Lactate chống sốc bỏng trong 24 giờ đầu.</span>
+            </div>
+
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-3 pt-2">
+            <button onclick="goToStep(1)" class="h-11 px-5 rounded-xl border border-gray-300 text-gray-700 font-semibold text-[14px] hover:bg-gray-100 flex items-center justify-center gap-1.5 transition-all">
+              <span class="material-symbols-outlined text-[18px]">arrow_back</span>
+              <span>Quay lại</span>
+            </button>
+            <button onclick="startAiAnalysis()" class="flex-1 h-11 px-6 rounded-xl bg-[#007AFF] hover:bg-[#006ee6] active:scale-[0.98] text-white font-semibold text-[15px] flex items-center justify-center gap-2 shadow-sm transition-all">
+              <span class="material-symbols-outlined text-[20px]">neurology</span>
+              <span>Bắt đầu Phân tích AI</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3: BƯỚC 3 - TIẾN TRÌNH PHÂN TÍCH AI (Step 3/4 - Animated Modal) -->
