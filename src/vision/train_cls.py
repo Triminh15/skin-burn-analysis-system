@@ -318,6 +318,7 @@ def main():
     parser.add_argument("--patience", type=int, default=8, help="Early stopping patience")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--run-name", type=str, default=None, help="Tên phiên chạy")
+    parser.add_argument("--output-dir", "--output_dir", type=str, default="outputs/checkpoints", help="Thư mục lưu checkpoints")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -334,8 +335,8 @@ def main():
     print(f"• Hàm mất mát         : {args.loss} (Label smoothing: {args.label_smoothing})")
     print(f"• Batch size / Epochs : {args.batch_size} / {args.epochs}")
 
-    checkpoint_dir = "outputs/checkpoints"
-    figures_dir = "outputs/figures"
+    checkpoint_dir = args.output_dir
+    figures_dir = os.path.join(args.output_dir, "figures") if args.output_dir != "outputs/checkpoints" else "outputs/figures"
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(figures_dir, exist_ok=True)
 
