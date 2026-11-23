@@ -215,7 +215,21 @@ def get_classification_loss(
         num_classes = len(samples_per_class) if samples_per_class else kwargs.get("num_classes", 3)
         annealing_epochs = kwargs.get("annealing_epochs", 10)
         from_logits = kwargs.get("from_logits", False)
-        return EDLLoss(num_classes=num_classes, annealing_epochs=annealing_epochs, from_logits=from_logits)
+        loss_type = kwargs.get("loss_type", "digamma")
+        kl_weight = kwargs.get("kl_weight", 0.2)
+        class_weights = kwargs.get("class_weights", None)
+        if class_weights is None and samples_per_class is not None and kwargs.get("use_class_weights", True):
+            total_samples = sum(samples_per_class)
+            weights = [total_samples / (num_classes * n) if n > 0 else 1.0 for n in samples_per_class]
+            class_weights = torch.tensor(weights, dtype=torch.float32)
+        return EDLLoss(
+            num_classes=num_classes,
+            annealing_epochs=annealing_epochs,
+            from_logits=from_logits,
+            loss_type=loss_type,
+            kl_weight=kl_weight,
+            class_weights=class_weights,
+        )
     else:
         raise ValueError(f"Hàm loss phân loại không hợp lệ: {name}. Chọn: weighted_ce, cb_focal, edl.")
 

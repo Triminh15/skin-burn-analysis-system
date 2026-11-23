@@ -16,19 +16,45 @@ import numpy as np
 
 class EDLLoss(nn.Module):
     """
-    Evidential Deep Learning Loss (Dirichlet Distribution)
-    Dựa trên: Sensoy et al. "Evidential Deep Learning to Quantify Classification Uncertainty", NeurIPS 2018.
+    Evidential Deep Learning Loss (Dirichlet Distribution) — Phiên bản Tối ưu cho Y tế.
+    Dựa trên:
+    - Sensoy et al., "Evidential Deep Learning to Quantify Classification Uncertainty", NeurIPS 2018.
+    - Han et al., "Trusted Multi-View Classification", ICLR 2021 (Digamma Risk + KL Scaling).
 
-    Hàm mất mát gồm 2 thành phần:
-    1. L_data: Expected Mean Squared Error giữa phân phối Dirichlet và One-hot Ground Truth.
-    2. L_KL: KL Divergence regularization phạt bằng chứng sai lệch, kéo về phân phối đều Uniform Prior.
-             Đi kèm hệ số annealing schedule: lambda_t = min(1.0, epoch / annealing_epochs).
+    Cải tiến tối ưu so với bản MSE cơ bản:
+    1. Digamma Bayes Risk (mặc định): Cho gradient mạnh và mượt tương đương Cross-Entropy,
+       tránh hiện tượng bão hòa gradient của MSE trên ảnh y khoa khó.
+    2. Class Weights (Trọng số đền bù lớp): Khắc phục mất cân bằng dữ liệu (ca nặng Độ 3 ít mẫu),
+       đẩy mạnh Macro F1 và Recall ca nguy kịch Độ 3.
+    3. Capped KL Weight (kl_weight = 0.2): Ngăn thành phần KL triệt tiêu bằng chứng (evidence collapse),
+       đưa độ bất định u về vùng lâm sàng hợp lý thay vì quá cao (~0.65).
     """
-    def __init__(self, num_classes: int = 3, annealing_epochs: int = 10, from_logits: bool = False):
+    def __init__(
+        self,
+        num_classes: int = 3,
+        annealing_epochs: int = 10,
+        from_logits: bool = False,
+        loss_type: str = "digamma",
+        kl_weight: float = 0.2,
+        class_weights: Optional[torch.Tensor] = None,
+    ):
         super().__init__()
+        if loss_type not in ("digamma", "log", "mse"):
+            raise ValueError(f"loss_type phải là 'digamma', 'log' hoặc 'mse', nhận được: {loss_type}")
         self.num_classes = num_classes
         self.annealing_epochs = annealing_epochs
         self.from_logits = from_logits
+        self.loss_type = loss_type
+        self.kl_weight = float(kl_weight)
+
+        if class_weights is not None:
+            if not isinstance(class_weights, torch.Tensor):
+                class_weights = torch.tensor(class_weights, dtype=torch.float32)
+            else:
+                class_weights = class_weights.detach().clone().float()
+            self.register_buffer("class_weights", class_weights)
+        else:
+            self.register_buffer("class_weights", None)
 
     def kl_divergence(self, alpha: torch.Tensor) -> torch.Tensor:
         """
@@ -67,18 +93,42 @@ class EDLLoss(nn.Module):
         # Tham số Dirichlet alpha_k = e_k + 1
         alpha = evidence + 1.0
         S = torch.sum(alpha, dim=1, keepdim=True)
-        p = alpha / S
         
-        # 1. Expected MSE Loss (Khớp dữ liệu: (y - p)^2 + Var(p))
-        loss_data = torch.sum((y_one_hot - p) ** 2, dim=1, keepdim=True)
-        variance = torch.sum(alpha * (S - alpha) / (S * S * (S + 1.0)), dim=1, keepdim=True)
-        loss_fit = torch.mean(loss_data + variance)
-        
-        # 2. KL Regularization với Annealing Schedule: lambda_t = min(1.0, epoch / annealing_epochs)
-        if self.annealing_epochs > 0:
-            annealing_coef = min(1.0, float(epoch) / float(self.annealing_epochs))
+        # 1. Thành phần Khớp dữ liệu (Data-Fit Bayes Risk) theo loại hàm tối ưu
+        if self.loss_type == "digamma":
+            # Bayes Risk của Cross-Entropy dưới phân phối Dirichlet: sum y_k * (psi(S) - psi(alpha_k))
+            per_sample_fit = torch.sum(
+                y_one_hot * (torch.digamma(S) - torch.digamma(alpha)),
+                dim=1,
+                keepdim=True
+            )
+        elif self.loss_type == "log":
+            # Type-II Maximum Likelihood: sum y_k * (log(S) - log(alpha_k))
+            per_sample_fit = torch.sum(
+                y_one_hot * (torch.log(S) - torch.log(alpha)),
+                dim=1,
+                keepdim=True
+            )
         else:
-            annealing_coef = 1.0
+            # Expected MSE Loss cổ điển: (y - p)^2 + Var(p)
+            p = alpha / S
+            loss_data = torch.sum((y_one_hot - p) ** 2, dim=1, keepdim=True)
+            variance = torch.sum(alpha * (S - alpha) / (S * S * (S + 1.0)), dim=1, keepdim=True)
+            per_sample_fit = loss_data + variance
+
+        # Áp dụng Class Weights (đền bù ca nặng Độ 3 bị mất cân bằng mẫu)
+        if self.class_weights is not None:
+            cw = self.class_weights.to(evidence.device)
+            sample_w = cw[target].unsqueeze(1)  # (B, 1)
+            loss_fit = torch.sum(per_sample_fit * sample_w) / (torch.sum(sample_w) + 1e-8)
+        else:
+            loss_fit = torch.mean(per_sample_fit)
+        
+        # 2. KL Regularization với Capped Annealing Schedule: lambda_t = kl_weight * min(1.0, epoch / annealing_epochs)
+        if self.annealing_epochs > 0:
+            annealing_coef = self.kl_weight * min(1.0, float(epoch) / float(self.annealing_epochs))
+        else:
+            annealing_coef = self.kl_weight
             
         # alpha_tilde: loại bỏ phạt với lớp ground truth
         alpha_tilde = y_one_hot + (1.0 - y_one_hot) * alpha

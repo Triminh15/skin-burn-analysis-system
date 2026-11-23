@@ -35,6 +35,7 @@ from albumentations.pytorch import ToTensorV2
 from src.vision.models import build_segmentation_model, build_classification_model
 from src.vision.postprocessing import clean_binary_mask, calculate_burn_area_percentage, get_burn_bounding_box, crop_roi
 from src.vision.transforms import IMAGENET_MEAN, IMAGENET_STD
+from src.utils.gradcam import GradCAM, get_target_layer_for_model
 
 
 CLASS_NAMES = ["Bỏng Độ 1 (Erythema)", "Bỏng Độ 2 (Blisters)", "Bỏng Độ 3 (Full Thickness)"]
@@ -134,16 +135,30 @@ def predict_pipeline(
     ])
     cls_input = cls_transforms(image=roi_rgb)["image"].unsqueeze(0).to(device)
 
-    with torch.no_grad():
-        cls_logits = cls_model(cls_input)
-        cls_probs = torch.softmax(cls_logits, dim=1).squeeze().cpu().numpy()
+    # Đảm bảo tensor có thể tính gradient cho Grad-CAM
+    cls_input.requires_grad_(True)
+    cls_logits = cls_model(cls_input)
+    cls_probs = torch.softmax(cls_logits, dim=1).detach().squeeze().cpu().numpy()
 
     pred_class_idx = int(np.argmax(cls_probs))
     pred_class_name = CLASS_NAMES[pred_class_idx]
     pred_confidence = float(cls_probs[pred_class_idx]) * 100.0
 
-    # 6. TRỰC QUAN HÓA KẾT QUẢ TỔNG HỢP (4 Ô LIÊN HOÀN)
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5), dpi=200)
+    # 6. GIẢI THÍCH MÔ HÌNH VỚI GRAD-CAM (XAI)
+    print("🔥 Đang tính toán bản đồ nhiệt kích hoạt Grad-CAM trên layer4...")
+    try:
+        target_layer = get_target_layer_for_model(cls_model, model_name="resnet34")
+        gradcam = GradCAM(cls_model, target_layer)
+        heatmap = gradcam.generate_heatmap(cls_input, class_idx=pred_class_idx)
+        gradcam_overlay, _ = gradcam.overlay_heatmap(roi_rgb, heatmap, alpha=0.55)
+        gradcam.remove_hooks()
+        print("  -> Đã tạo thành công bản đồ nhiệt Grad-CAM.")
+    except Exception as e:
+        print(f"  ⚠️ Cảnh báo Grad-CAM: {e}")
+        gradcam_overlay = roi_rgb.copy()
+
+    # 7. TRỰC QUAN HÓA KẾT QUẢ TỔNG HỢP (5 Ô LIÊN HOÀN)
+    fig, axes = plt.subplots(1, 5, figsize=(25, 5), dpi=200)
 
     # Ô 1: Ảnh gốc
     axes[0].imshow(orig_rgb)
@@ -169,21 +184,26 @@ def predict_pipeline(
     axes[2].set_title(f"3. Vùng ROI đệm vuông\n(224x224 px)", fontsize=11, fontweight="bold")
     axes[2].axis("off")
 
-    # Ô 4: Biểu đồ phân bố xác suất cấp độ
+    # Ô 4: Bản đồ nhiệt Grad-CAM (Giải thích vùng AI chú ý)
+    axes[3].imshow(gradcam_overlay)
+    axes[3].set_title(f"4. Giải thích Grad-CAM\n(Vùng nhiệt kích hoạt trên layer4)", fontsize=11, fontweight="bold")
+    axes[3].axis("off")
+
+    # Ô 5: Biểu đồ phân bố xác suất cấp độ
     y_pos = np.arange(len(CLASS_NAMES))
-    axes[3].barh(y_pos, cls_probs * 100.0, color=CLASS_COLORS, edgecolor="black", height=0.55)
-    axes[3].set_yticks(y_pos)
-    axes[3].set_yticklabels(["Độ 1", "Độ 2", "Độ 3"], fontsize=11, fontweight="bold")
-    axes[3].set_xlim(0, 100)
-    axes[3].set_xlabel("Độ tin cậy (%)", fontsize=10, fontweight="bold")
-    axes[3].set_title(f"4. Kết luận: {pred_class_name.split()[0]} {pred_class_name.split()[1]}\n(Độ tin cậy: {pred_confidence:.1f}%)",
+    axes[4].barh(y_pos, cls_probs * 100.0, color=CLASS_COLORS, edgecolor="black", height=0.55)
+    axes[4].set_yticks(y_pos)
+    axes[4].set_yticklabels(["Độ 1", "Độ 2", "Độ 3"], fontsize=11, fontweight="bold")
+    axes[4].set_xlim(0, 100)
+    axes[4].set_xlabel("Độ tin cậy (%)", fontsize=10, fontweight="bold")
+    axes[4].set_title(f"5. Kết luận: {pred_class_name.split()[0]} {pred_class_name.split()[1]}\n(Độ tin cậy: {pred_confidence:.1f}%)",
                       fontsize=11, fontweight="bold", color=CLASS_COLORS[pred_class_idx])
 
     for i, v in enumerate(cls_probs * 100.0):
-        axes[3].text(v + 2, i, f"{v:.1f}%", va="center", fontsize=10, fontweight="bold")
+        axes[4].text(v + 2, i, f"{v:.1f}%", va="center", fontsize=10, fontweight="bold")
 
     plt.suptitle("HỆ THỐNG PHÂN TÍCH VẾT BỎNG ĐA PHƯƠNG THÁI (SKIN BURN ANALYSIS PIPELINE)",
-                 fontsize=13, fontweight="bold", y=1.02)
+                 fontsize=14, fontweight="bold", y=1.02)
     plt.tight_layout()
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -242,3 +262,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

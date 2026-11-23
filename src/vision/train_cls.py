@@ -309,7 +309,10 @@ def main():
     parser = argparse.ArgumentParser(description="Script Huấn luyện Phân loại Cấp độ Bỏng (Classification Training)")
     parser.add_argument("--model", type=str, default="resnet34", choices=["resnet34", "convnext_tiny"], help="Kiến trúc mô hình")
     parser.add_argument("--loss", type=str, default="weighted_ce", choices=["weighted_ce", "cb_focal", "edl"], help="Hàm mất mát")
-    parser.add_argument("--annealing-epochs", type=int, default=10, help="Số epoch annealing cho EDL Loss")
+    parser.add_argument("--annealing-epochs", "--annealing_epochs", type=int, default=10, help="Số epoch annealing cho EDL Loss")
+    parser.add_argument("--edl-type", "--edl_type", type=str, default="digamma", choices=["digamma", "log", "mse"], help="Dạng Bayes Risk cho EDL (digamma tối ưu nhất)")
+    parser.add_argument("--kl-weight", "--kl_weight", type=float, default=0.2, help="Trọng số cực đại phạt KL trong EDL (tránh triệt tiêu evidence)")
+    parser.add_argument("--no-class-weights", "--no_class_weights", action="store_true", help="Tắt trọng số đền bù mất cân bằng lớp cho EDL")
     parser.add_argument("--epochs", type=int, default=30, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
@@ -373,17 +376,27 @@ def main():
     print(f"  -> Tổng số tham số: {total_params / 1e6:.2f}M")
 
     is_edl = (args.loss == "edl")
+    # Tính phân bố mẫu thực tế từ tập train để cân bằng trọng số lớp chuẩn xác
+    class_counts = [int((train_dataset.df["severity_degree"] == c).sum()) for c in range(3)]
+    if any(c == 0 for c in class_counts):
+        class_counts = [359, 346, 153]
+
     if is_edl:
         criterion = get_classification_loss(
             name=args.loss,
+            samples_per_class=class_counts,
             num_classes=3,
-            annealing_epochs=args.annealing_epochs
+            annealing_epochs=args.annealing_epochs,
+            loss_type=args.edl_type,
+            kl_weight=args.kl_weight,
+            use_class_weights=not args.no_class_weights,
         ).to(device)
+        cw_str = [round(w, 3) for w in criterion.class_weights.tolist()] if criterion.class_weights is not None else "None"
+        print(f"  -> EDL Config: type={args.edl_type} | kl_weight={args.kl_weight} | class_weights={cw_str}")
     else:
-        # Phân bố mẫu: Độ 1 (359), Độ 2 (346), Độ 3 (153)
         criterion = get_classification_loss(
             name=args.loss,
-            samples_per_class=[359, 346, 153],
+            samples_per_class=class_counts,
             label_smoothing=args.label_smoothing
         ).to(device)
 

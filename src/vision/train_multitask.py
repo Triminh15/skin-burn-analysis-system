@@ -475,6 +475,9 @@ def main():
     parser.add_argument("--cls_loss", "--cls-loss", type=str, default="edl", choices=["edl", "ce"])
     parser.add_argument("--no_edl", "--no-edl", action="store_true", help="Tắt EDL, dùng Cross-Entropy thuần (Softmax) cho nhánh phân loại")
     parser.add_argument("--annealing_epochs", "--annealing-epochs", type=int, default=10, help="Số epoch ủ nhiệt cho KL divergence trong EDL")
+    parser.add_argument("--edl_type", "--edl-type", type=str, default="digamma", choices=["digamma", "log", "mse"], help="Dạng Bayes Risk cho EDL (digamma tối ưu nhất)")
+    parser.add_argument("--kl_weight", "--kl-weight", type=float, default=0.2, help="Trọng số cực đại phạt KL trong EDL (tránh triệt tiêu evidence)")
+    parser.add_argument("--no_class_weights", "--no-class-weights", action="store_true", help="Tắt trọng số đền bù mất cân bằng lớp")
     parser.add_argument("--boundary_kernel", "--boundary-kernel", type=int, default=5, help="Kích thước kernel hình thái học trích xuất viền")
 
     # Siêu tham số Huấn luyện
@@ -570,10 +573,28 @@ def main():
     bce_loss_fn = nn.BCEWithLogitsLoss()
 
     use_edl = (args.cls_loss == "edl")
+    # Tính trọng số nghịch đảo tần số lớp từ tập Train thực tế (đền bù ca nặng Độ 3)
+    class_weights_tensor = None
+    if not args.no_class_weights:
+        train_df = train_loader.dataset.df
+        class_counts = [int((train_df["severity_degree"] == c).sum()) for c in range(args.num_classes)]
+        if all(c > 0 for c in class_counts):
+            total_n = sum(class_counts)
+            cw_list = [total_n / (args.num_classes * c) for c in class_counts]
+            class_weights_tensor = torch.tensor(cw_list, dtype=torch.float32, device=device)
+            print(f"  + Class Counts: {class_counts} -> Class Weights: {[round(w, 3) for w in cw_list]}")
+
     if use_edl:
-        edl_loss_fn = EDLLoss(num_classes=args.num_classes, annealing_epochs=args.annealing_epochs)
+        edl_loss_fn = EDLLoss(
+            num_classes=args.num_classes,
+            annealing_epochs=args.annealing_epochs,
+            loss_type=args.edl_type,
+            kl_weight=args.kl_weight,
+            class_weights=class_weights_tensor,
+        ).to(device)
+        print(f"  + EDL Config: type={args.edl_type}, kl_weight={args.kl_weight}, annealing={args.annealing_epochs}")
     else:
-        edl_loss_fn = nn.CrossEntropyLoss()
+        edl_loss_fn = nn.CrossEntropyLoss(weight=class_weights_tensor, label_smoothing=0.05)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)

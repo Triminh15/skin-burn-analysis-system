@@ -137,3 +137,23 @@ def test_get_classification_loss_factory():
     # Test alias
     edl_fn2 = get_classification_loss("edl_loss", num_classes=3)
     assert isinstance(edl_fn2, EDLLoss)
+    assert edl_fn2.loss_type == "digamma"
+    assert edl_fn2.class_weights is not None
+
+
+def test_edl_loss_types_and_class_weights():
+    """Kiểm tra cả 3 chế độ digamma/log/mse, class_weights và kl_weight capping"""
+    logits = torch.tensor([[2.0, 0.5, -0.5], [-0.5, 0.2, 1.5], [0.1, 1.2, 0.3]], requires_grad=True)
+    evidence = F.softplus(logits)
+    targets = torch.tensor([0, 2, 1])
+    cw = torch.tensor([0.8, 0.8, 2.0])
+
+    for lt in ("digamma", "log", "mse"):
+        fn = EDLLoss(num_classes=3, annealing_epochs=10, loss_type=lt, kl_weight=0.2, class_weights=cw)
+        loss = fn(evidence, targets, epoch=5)
+        assert loss.ndim == 0 and torch.isfinite(loss) and loss.item() > 0
+
+    # KL weight nhỏ hơn phải tạo ra loss nhỏ hơn khi có bằng chứng sai lệch ở epoch >= annealing_epochs
+    fn_low_kl = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=0.1)
+    fn_high_kl = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=1.0)
+    assert fn_low_kl(evidence, targets, epoch=10).item() < fn_high_kl(evidence, targets, epoch=10).item()
