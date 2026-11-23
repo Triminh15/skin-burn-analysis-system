@@ -436,49 +436,49 @@ def main():
     parser = argparse.ArgumentParser(description="Multi-Task MT-EANet-EDL Training Pipeline")
 
     # Dữ liệu & Đường dẫn
-    parser.add_argument("--train_csv", type=str, default="data/splits/train.csv")
-    parser.add_argument("--val_csv", type=str, default="data/splits/val.csv")
-    parser.add_argument("--test_csv", type=str, default="data/splits/test.csv")
-    parser.add_argument("--output_dir", type=str, default="outputs/checkpoints/mteanet_multitask")
-    parser.add_argument("--run_name", type=str, default="run_mteanet_edl")
+    parser.add_argument("--train_csv", "--train-csv", type=str, default="data/splits/train.csv")
+    parser.add_argument("--val_csv", "--val-csv", type=str, default="data/splits/val.csv")
+    parser.add_argument("--test_csv", "--test-csv", type=str, default="data/splits/test.csv")
+    parser.add_argument("--output_dir", "--output-dir", type=str, default="outputs/checkpoints/mteanet_multitask")
+    parser.add_argument("--run_name", "--run-name", type=str, default="run_mteanet_edl")
 
     # Mô hình
     parser.add_argument("--encoder", type=str, default="resnet34")
-    parser.add_argument("--num_classes", type=int, default=3)
+    parser.add_argument("--num_classes", "--num-classes", type=int, default=3)
     parser.add_argument("--pretrained", action="store_true", default=True)
-    parser.add_argument("--no_pretrained", action="store_false", dest="pretrained")
+    parser.add_argument("--no_pretrained", "--no-pretrained", action="store_false", dest="pretrained")
     parser.add_argument(
-        "--model_type",
+        "--model_type", "--model-type",
         type=str,
         default="mteanet_edl",
         choices=["mteanet_edl", "multitask_edl"],
         help="mteanet_edl (M3): Multi-Task + Dual-Branch; multitask_edl (M2): Multi-Task thuần (không Dual-Branch)"
     )
-    parser.add_argument("--use_boundary", action="store_true", default=True, help="Bật nhánh viền ban đỏ Dual-Branch (MT-EANet)")
-    parser.add_argument("--no_boundary", action="store_false", dest="use_boundary", help="Tắt nhánh viền ban đỏ (Multi-Task thuần)")
+    parser.add_argument("--use_boundary", "--use-boundary", action="store_true", default=True, help="Bật nhánh viền ban đỏ Dual-Branch (MT-EANet)")
+    parser.add_argument("--no_boundary", "--no-boundary", action="store_false", dest="use_boundary", help="Tắt nhánh viền ban đỏ (Multi-Task thuần)")
 
     # Trọng số Joint Loss (Section 7)
-    parser.add_argument("--w_seg", type=float, default=1.0, help="Trọng số hàm loss phân đoạn")
-    parser.add_argument("--w_bnd", type=float, default=0.3, help="Trọng số hàm loss viền ban đỏ")
-    parser.add_argument("--w_cls", type=float, default=0.5, help="Trọng số hàm loss phân loại")
+    parser.add_argument("--w_seg", "--w-seg", type=float, default=1.0, help="Trọng số hàm loss phân đoạn")
+    parser.add_argument("--w_bnd", "--w-bnd", type=float, default=0.3, help="Trọng số hàm loss viền ban đỏ")
+    parser.add_argument("--w_cls", "--w-cls", type=float, default=0.5, help="Trọng số hàm loss phân loại")
 
     # Cấu hình hàm mất mát
-    parser.add_argument("--seg_loss", type=str, default="focal_tversky", choices=["focal_tversky", "combo", "dice"])
-    parser.add_argument("--cls_loss", type=str, default="edl", choices=["edl", "ce"])
-    parser.add_argument("--annealing_epochs", type=int, default=10, help="Số epoch ủ nhiệt cho KL divergence trong EDL")
-    parser.add_argument("--boundary_kernel", type=int, default=5, help="Kích thước kernel hình thái học trích xuất viền")
+    parser.add_argument("--seg_loss", "--seg-loss", type=str, default="focal_tversky", choices=["focal_tversky", "combo", "dice"])
+    parser.add_argument("--cls_loss", "--cls-loss", type=str, default="edl", choices=["edl", "ce"])
+    parser.add_argument("--annealing_epochs", "--annealing-epochs", type=int, default=10, help="Số epoch ủ nhiệt cho KL divergence trong EDL")
+    parser.add_argument("--boundary_kernel", "--boundary-kernel", type=int, default=5, help="Kích thước kernel hình thái học trích xuất viền")
 
     # Siêu tham số Huấn luyện
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", "--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--weight_decay", type=float, default=1e-4)
-    parser.add_argument("--img_size", type=int, default=256)
+    parser.add_argument("--weight_decay", "--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--img_size", "--img-size", type=int, default=256)
     parser.add_argument("--patience", type=int, default=10, help="Ngưỡng Early Stopping")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--num_workers", type=int, default=0)
+    parser.add_argument("--num_workers", "--num-workers", type=int, default=0)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--eval_only", action="store_true", help="Chỉ chạy đánh giá trên tập Test")
+    parser.add_argument("--eval_only", "--eval-only", action="store_true", help="Chỉ chạy đánh giá trên tập Test")
     parser.add_argument("--checkpoint", type=str, default=None, help="Đường dẫn nạp checkpoint có sẵn")
 
     args = parser.parse_args()
