@@ -112,6 +112,7 @@ class MultiTaskMetricTracker:
         boundaries: torch.Tensor,
         labels: torch.Tensor,
         losses: Dict[str, float],
+        use_edl: bool = True,
     ):
         batch_size = labels.size(0)
         self.total_samples += batch_size
@@ -126,9 +127,16 @@ class MultiTaskMetricTracker:
         self.seg_tracker.update(outputs["mask_logits"], masks)
 
         # Cập nhật Classification & Uncertainty
-        evidence = outputs["evidence"]
         with torch.no_grad():
-            probs, uncertainty = get_edl_metrics(evidence, num_classes=self.num_classes)
+            if use_edl:
+                evidence = outputs["evidence"]
+                probs, uncertainty = get_edl_metrics(evidence, num_classes=self.num_classes)
+            else:
+                cls_logits = outputs["cls_logits"]
+                probs = torch.softmax(cls_logits, dim=-1)
+                # Softmax uncertainty: 1 - max probability
+                uncertainty = 1.0 - torch.max(probs, dim=-1).values
+
             preds = torch.argmax(probs, dim=-1)
 
             # Cập nhật phân loại
@@ -250,7 +258,7 @@ def train_one_epoch(
             "loss_bnd": loss_bnd.item(),
             "loss_cls": loss_cls.item(),
         }
-        tracker.update(outputs, masks, boundaries, labels, losses_dict)
+        tracker.update(outputs, masks, boundaries, labels, losses_dict, use_edl=use_edl)
         pbar.set_postfix({
             "Loss": f"{loss_total.item():.3f}",
             "Seg": f"{loss_seg.item():.3f}",
@@ -308,7 +316,7 @@ def evaluate(
                 "loss_bnd": loss_bnd.item(),
                 "loss_cls": loss_cls.item(),
             }
-            tracker.update(outputs, masks, boundaries, labels, losses_dict)
+            tracker.update(outputs, masks, boundaries, labels, losses_dict, use_edl=use_edl)
             pbar.set_postfix({"Loss": f"{loss_total.item():.3f}"})
 
     return tracker.compute()
@@ -465,6 +473,7 @@ def main():
     # Cấu hình hàm mất mát
     parser.add_argument("--seg_loss", "--seg-loss", type=str, default="focal_tversky", choices=["focal_tversky", "combo", "dice"])
     parser.add_argument("--cls_loss", "--cls-loss", type=str, default="edl", choices=["edl", "ce"])
+    parser.add_argument("--no_edl", "--no-edl", action="store_true", help="Tắt EDL, dùng Cross-Entropy thuần (Softmax) cho nhánh phân loại")
     parser.add_argument("--annealing_epochs", "--annealing-epochs", type=int, default=10, help="Số epoch ủ nhiệt cho KL divergence trong EDL")
     parser.add_argument("--boundary_kernel", "--boundary-kernel", type=int, default=5, help="Kích thước kernel hình thái học trích xuất viền")
 
@@ -483,14 +492,20 @@ def main():
 
     args = parser.parse_args()
 
-    # Đồng bộ hóa cấu hình kiến trúc cho Ablation Study (M2 vs M3)
+    # Đồng bộ hóa cấu hình kiến trúc cho Ablation Study (M2 vs M3 vs No-EDL)
+    if args.no_edl:
+        args.cls_loss = "ce"
+
+    use_edl = (args.cls_loss == "edl")
+    loss_tag = "EDL" if use_edl else "CE"
+
     if args.model_type == "multitask_edl" or not args.use_boundary or args.w_bnd <= 0.0:
         args.use_boundary = False
         args.w_bnd = 0.0
-        model_name_display = "Multi-Task Thuần (Shared + EDL, Không Dual-Branch - M2)"
+        model_name_display = f"Multi-Task Thuần (Shared + {loss_tag}, Không Dual-Branch)"
     else:
         args.use_boundary = True
-        model_name_display = "MT-EANet-EDL (Multi-Task + Dual-Branch Viền Ban Đỏ + EDL - M3)"
+        model_name_display = f"MT-EANet-{loss_tag} (Multi-Task + Dual-Branch Viền + {loss_tag})"
 
     set_seed(args.seed)
     device = torch.device(args.device)
