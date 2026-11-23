@@ -5,10 +5,21 @@ Mục đích: Định nghĩa các hàm mất mát (Loss Functions) chuyên dụn
 2. Giai đoạn Phân loại (Classification): Weighted Cross-Entropy, Class-Balanced Focal Loss kết hợp Label Smoothing.
 """
 
+import os
+import sys
+from typing import Optional, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, List
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+try:
+    from src.vision.edl_loss import EDLLoss, get_edl_metrics, calculate_ece
+except ImportError:
+    from edl_loss import EDLLoss, get_edl_metrics, calculate_ece
 
 
 # ==============================================================================
@@ -200,8 +211,13 @@ def get_classification_loss(
             label_smoothing=label_smoothing,
             **kwargs
         )
+    elif name_clean in ["edl", "edl_loss"]:
+        num_classes = len(samples_per_class) if samples_per_class else kwargs.get("num_classes", 3)
+        annealing_epochs = kwargs.get("annealing_epochs", 10)
+        from_logits = kwargs.get("from_logits", False)
+        return EDLLoss(num_classes=num_classes, annealing_epochs=annealing_epochs, from_logits=from_logits)
     else:
-        raise ValueError(f"Hàm loss phân loại không hợp lệ: {name}. Chọn: weighted_ce, cb_focal.")
+        raise ValueError(f"Hàm loss phân loại không hợp lệ: {name}. Chọn: weighted_ce, cb_focal, edl.")
 
 
 # ==============================================================================
@@ -242,4 +258,10 @@ if __name__ == "__main__":
     loss_cbf = loss_cbf_fn(dummy_cls_logits, dummy_labels)
     loss_cbf.backward()
     print(f"[OK] Class-Balanced Focal Loss test: {loss_cbf.item():.4f} (Grad OK)")
+
+    loss_edl_fn = get_classification_loss("edl", annealing_epochs=10)
+    dummy_ev = F.softplus(torch.randn(8, 3, requires_grad=True))
+    loss_edl = loss_edl_fn(dummy_ev, dummy_labels, epoch=5)
+    loss_edl.backward()
+    print(f"[OK] EDLLoss test: {loss_edl.item():.4f} (Grad OK)")
     print("[SUCCESS] All loss functions passed sanity checks perfectly!")

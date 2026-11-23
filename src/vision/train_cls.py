@@ -38,11 +38,13 @@ from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 from src.vision.losses import get_classification_loss
+from src.vision.edl_loss import get_edl_metrics, calculate_ece
 from src.vision.metrics import ClassificationMetricTracker
 from src.vision.models import build_classification_model, count_parameters
 
@@ -141,7 +143,9 @@ def train_one_epoch(
     dataloader: DataLoader,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
-    device: torch.device
+    device: torch.device,
+    epoch: int = 1,
+    is_edl: bool = False
 ) -> Tuple[float, float, float]:
     model.train()
     running_loss = 0.0
@@ -154,12 +158,20 @@ def train_one_epoch(
 
         optimizer.zero_grad()
         logits = model(images)
-        loss = criterion(logits, targets)
+
+        if is_edl:
+            evidence = F.softplus(logits)
+            loss = criterion(evidence, targets, epoch=epoch)
+            prob, _ = get_edl_metrics(evidence, num_classes=logits.size(1))
+            tracker.update(prob, targets)
+        else:
+            loss = criterion(logits, targets)
+            tracker.update(logits, targets)
+
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item() * images.size(0)
-        tracker.update(logits, targets)
         pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
     epoch_loss = running_loss / len(dataloader.dataset)
@@ -171,11 +183,15 @@ def validate(
     model: nn.Module,
     dataloader: DataLoader,
     criterion: nn.Module,
-    device: torch.device
+    device: torch.device,
+    epoch: int = 1,
+    is_edl: bool = False
 ) -> Tuple[float, Dict[str, Any]]:
     model.eval()
     running_loss = 0.0
     tracker = ClassificationMetricTracker()
+    all_probs = []
+    all_uncertainties = []
 
     with torch.no_grad():
         pbar = tqdm(dataloader, desc="  Eval ", leave=False, dynamic_ncols=True)
@@ -184,14 +200,36 @@ def validate(
             targets = batch["severity"].to(device)
 
             logits = model(images)
-            loss = criterion(logits, targets)
+
+            if is_edl:
+                evidence = F.softplus(logits)
+                loss = criterion(evidence, targets, epoch=epoch)
+                prob, u = get_edl_metrics(evidence, num_classes=logits.size(1))
+                all_probs.append(prob.cpu())
+                all_uncertainties.append(u.cpu())
+                tracker.update(prob, targets)
+            else:
+                loss = criterion(logits, targets)
+                probs = F.softmax(logits, dim=-1)
+                all_probs.append(probs.cpu())
+                tracker.update(logits, targets)
 
             running_loss += loss.item() * images.size(0)
-            tracker.update(logits, targets)
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
 
     eval_loss = running_loss / len(dataloader.dataset)
     metrics = tracker.compute()
+
+    # Tính toán ECE và Epistemic Uncertainty
+    if len(all_probs) > 0:
+        stacked_probs = torch.cat(all_probs, dim=0)
+        y_true = torch.tensor(tracker.all_targets)
+        metrics["ece"] = round(calculate_ece(stacked_probs, y_true), 4)
+
+    if is_edl and len(all_uncertainties) > 0:
+        stacked_u = torch.cat(all_uncertainties, dim=0)
+        metrics["mean_uncertainty"] = round(float(stacked_u.mean().item()), 4)
+
     return eval_loss, metrics
 
 
@@ -270,7 +308,8 @@ def plot_confusion_matrix(cm: List[List[int]], save_path: str, run_name: str):
 def main():
     parser = argparse.ArgumentParser(description="Script Huấn luyện Phân loại Cấp độ Bỏng (Classification Training)")
     parser.add_argument("--model", type=str, default="resnet34", choices=["resnet34", "convnext_tiny"], help="Kiến trúc mô hình")
-    parser.add_argument("--loss", type=str, default="weighted_ce", choices=["weighted_ce", "cb_focal"], help="Hàm mất mát")
+    parser.add_argument("--loss", type=str, default="weighted_ce", choices=["weighted_ce", "cb_focal", "edl"], help="Hàm mất mát")
+    parser.add_argument("--annealing-epochs", type=int, default=10, help="Số epoch annealing cho EDL Loss")
     parser.add_argument("--epochs", type=int, default=30, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
@@ -332,12 +371,20 @@ def main():
     total_params, trainable_params = count_parameters(model)
     print(f"  -> Tổng số tham số: {total_params / 1e6:.2f}M")
 
-    # Phân bố mẫu: Độ 1 (359), Độ 2 (346), Độ 3 (153)
-    criterion = get_classification_loss(
-        name=args.loss,
-        samples_per_class=[359, 346, 153],
-        label_smoothing=args.label_smoothing
-    ).to(device)
+    is_edl = (args.loss == "edl")
+    if is_edl:
+        criterion = get_classification_loss(
+            name=args.loss,
+            num_classes=3,
+            annealing_epochs=args.annealing_epochs
+        ).to(device)
+    else:
+        # Phân bố mẫu: Độ 1 (359), Độ 2 (346), Độ 3 (153)
+        criterion = get_classification_loss(
+            name=args.loss,
+            samples_per_class=[359, 346, 153],
+            label_smoothing=args.label_smoothing
+        ).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
@@ -353,6 +400,9 @@ def main():
         "val_macro_f1": [],
         "val_recall_deg3": []
     }
+    if is_edl:
+        history["val_uncertainty"] = []
+        history["val_ece"] = []
 
     best_val_macro_f1 = 0.0
     patience_counter = 0
@@ -365,10 +415,10 @@ def main():
         epoch_start = time.time()
 
         train_loss, train_acc, train_f1 = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model, train_loader, criterion, optimizer, device, epoch=epoch, is_edl=is_edl
         )
         val_loss, val_metrics = validate(
-            model, val_loader, criterion, device
+            model, val_loader, criterion, device, epoch=epoch, is_edl=is_edl
         )
 
         scheduler.step()
@@ -386,6 +436,9 @@ def main():
         history["val_acc"].append(round(val_acc, 4))
         history["val_macro_f1"].append(round(val_f1, 4))
         history["val_recall_deg3"].append(round(val_rec3, 4))
+        if is_edl:
+            history["val_uncertainty"].append(val_metrics.get("mean_uncertainty", 0.0))
+            history["val_ece"].append(val_metrics.get("ece", 0.0))
 
         improved_str = ""
         # Tiêu chí chọn Best Model: Dựa vào Macro F1 (chống mất cân bằng)
@@ -399,10 +452,14 @@ def main():
             patience_counter += 1
             improved_str = f" (Patience: {patience_counter}/{args.patience})"
 
+        edl_info = ""
+        if is_edl and "mean_uncertainty" in val_metrics:
+            edl_info = f" | u: {val_metrics['mean_uncertainty']:.3f}, ECE: {val_metrics.get('ece', 0.0)*100:.1f}%"
+
         print(
             f"Epoch [{epoch:02d}/{args.epochs:02d}] "
             f"Train Loss: {train_loss:.4f} (Acc: {train_acc*100:.1f}%) | "
-            f"Val Acc: {val_acc*100:.1f}% (F1: {val_f1*100:.1f}%, Rec Độ 3: {val_rec3*100:.1f}%) | "
+            f"Val Acc: {val_acc*100:.1f}% (F1: {val_f1*100:.1f}%, Rec Độ 3: {val_rec3*100:.1f}%){edl_info} | "
             f"Time: {epoch_time:.1f}s{improved_str}"
         )
 
@@ -429,7 +486,7 @@ def main():
         print(f"• Đang nạp mô hình xuất sắc nhất từ: {best_checkpoint_path}")
         model.load_state_dict(torch.load(best_checkpoint_path, map_location=device))
 
-    test_loss, test_metrics = validate(model, test_loader, criterion, device)
+    test_loss, test_metrics = validate(model, test_loader, criterion, device, epoch=args.epochs, is_edl=is_edl)
     plot_confusion_matrix(test_metrics["confusion_matrix"], cm_png_path, args.run_name)
 
     test_results = {
@@ -443,6 +500,8 @@ def main():
         "test_macro_f1": test_metrics["macro_f1"],
         "test_macro_recall": test_metrics["macro_recall"],
         "test_recall_degree_3": test_metrics["recall_degree_3"],
+        "test_ece": test_metrics.get("ece", None),
+        "test_mean_uncertainty": test_metrics.get("mean_uncertainty", None),
         "confusion_matrix": test_metrics["confusion_matrix"],
         "per_class_results": test_metrics["per_class"],
         "training_time_minutes": round(total_training_time / 60, 2)
@@ -458,9 +517,13 @@ def main():
     print(f"│ 1. Overall Accuracy           │ {test_metrics['accuracy'] * 100:6.2f}%                       │")
     print(f"│ 2. Macro F1-Score             │ {test_metrics['macro_f1'] * 100:6.2f}%                       │")
     print(f"│ 3. RECALL BỎNG ĐỘ 3 (Ca nặng) │ {test_metrics['recall_degree_3'] * 100:6.2f}%                       │")
-    print(f"│ 4. Test Loss                  │ {test_loss:6.4f}                         │")
-    print(f"│ 5. Best Val Macro F1          │ {best_val_macro_f1 * 100:6.2f}%                       │")
-    print(f"│ 6. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
+    if "ece" in test_metrics:
+        print(f"│ 4. Calibration ECE            │ {test_metrics['ece'] * 100:6.2f}%                       │")
+    if "mean_uncertainty" in test_metrics:
+        print(f"│ 5. Mean Uncertainty (u)       │ {test_metrics['mean_uncertainty']:6.4f}                         │")
+    print(f"│ 6. Test Loss                  │ {test_loss:6.4f}                         │")
+    print(f"│ 7. Best Val Macro F1          │ {best_val_macro_f1 * 100:6.2f}%                       │")
+    print(f"│ 8. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
     print(f"└───────────────────────────────┴───────────────────────────────┘")
     print(f"🖼️ Ma trận nhầm lẫn đã lưu tại: {cm_png_path}")
     print(f"💾 File kết quả JSON đã lưu tại: {test_json_path}")
