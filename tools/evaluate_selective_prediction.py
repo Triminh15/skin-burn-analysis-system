@@ -262,6 +262,17 @@ def evaluate_checkpoint(
     probs_raw, u_t, y_t = _infer_probs_and_u(model, loader, device, edl_activation)
     probs_t = _apply_deg3_cost_weight(probs_raw, best_deg3_cost)
 
+    if calibrate_deg3_on_val:
+        raw_sel = compute_selective_prediction_metrics(probs_raw, u_t, y_t, coverages=(1.0,))["coverage_table"][0]
+        cal_sel = compute_selective_prediction_metrics(probs_t, u_t, y_t, coverages=(1.0,))["coverage_table"][0]
+        print("\n⚖️ ĐỐI SÁNH TRỰC TIẾP TRÊN 1 MÔ HÌNH ĐƠN LẺ (TRƯỚC vs SAU ĐIỂM CÂN BẰNG VÀNG TỪ VALIDATION):")
+        print("┌────────────────────────────────────┬───────────┬───────────┬──────────────┐")
+        print("│ Chế độ Quyết định (187 ảnh Test)   │ Accuracy  │ Macro F1  │ Recall Độ 3  │")
+        print("├────────────────────────────────────┼───────────┼───────────┼──────────────┤")
+        print(f"│ 1. Mặc định (c3 = 1.00)            │  {raw_sel['accuracy']*100:6.2f}%  │  {raw_sel['macro_f1']*100:6.2f}%  │    {raw_sel['recall_degree_3']*100:6.2f}%   │")
+        print(f"│ 2. Điểm cân bằng vàng (c3 = {best_deg3_cost:4.2f})  │  {cal_sel['accuracy']*100:6.2f}%  │  {cal_sel['macro_f1']*100:6.2f}%  │    {cal_sel['recall_degree_3']*100:6.2f}%   │")
+        print("└────────────────────────────────────┴───────────┴───────────┴──────────────┘")
+
     ece = calculate_ece(probs_raw, y_t)
     sel = compute_selective_prediction_metrics(probs_t, u_t, y_t)
     sel["ece"] = round(ece, 4)
