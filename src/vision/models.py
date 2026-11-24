@@ -107,19 +107,20 @@ class GatedFusionModule(nn.Module):
 
 class EAUNet(nn.Module):
     """
-    Erythema-Aware Dual-Branch U-Net (EA-UNet v2) với Cơ chế Giám sát Đa tầng (Deep Boundary Supervision).
-    
-    Cấu trúc:
-    1. Pretrained Encoder (ResNet-34 / ConvNeXt): Trích xuất đặc trưng đa tầng (c0..c4).
-    2. Expansive Decoder Path: Giải nén không gian kết hợp Skip Connections.
-    3. Dual-Branch Refinement:
-       - Core Branch: Bắt trọn lòng tổn thương hoại tử sâu qua Dilated Convolutions (d=2).
-       - Boundary Branch: Tách riêng dải viền ban đỏ ngoại vi (Erythema) từ đặc trưng nông c0.
-       - Deep Boundary Supervision Head: Dự đoán trực tiếp Ground-Truth viền để chống trôi dạt gradient.
-       - Residual Gated Fusion: Hợp nhất phần dư không làm loãng đặc trưng chính.
-    4. Output:
-       - Train mode: Trả về (mask_logits, boundary_logits) để huấn luyện đa mục tiêu.
-       - Eval / Test mode: Trả về mask_logits chuẩn (B, classes, H, W).
+    SMP-Anchored Erythema-Aware Dual-Branch U-Net (EA-UNet v3)
+    với Residual Scaling gần 0 (Near-Zero Residual Initialization) và Deep Boundary Supervision.
+
+    Khắc phục triệt để sai lệch nền tảng so với smp.Unet:
+    1. Giữ nguyên 100% lõi smp.Unet (Torchvision IMAGENET1K_V1 ResNet-34 encoder 6 tầng,
+       Kaiming-ReLU decoder, và 3x3 Xavier segmentation_head đạt 65.19% Dice).
+    2. Trích xuất song song ở độ phân giải gốc (H x W):
+       - CoreLesionBranch (Dilated Conv d=2 trên đặc trưng giải mã dec_feat 16 kênh)
+       - ErythemaBoundaryBranch (trích xuất quầng ban đỏ trực tiếp từ ảnh RGB gốc + skip c1 128x128)
+       - GatedFusionModule trộn thích nghi đặc trưng lõi và viền.
+    3. Kết nối phần dư có trọng số học được khởi tạo nhỏ (gamma = 0.01):
+       F_refined = F_dec + gamma * GatedFusion(F_core, F_bnd)
+       Đảm bảo tại vạch xuất phát mô hình bảo toàn 99%+ hành vi của smp.Unet chuẩn và chỉ học
+       bổ sung phần tinh chỉnh viền ban đỏ làm giảm sai số phân đoạn.
     """
     def __init__(
         self,
@@ -130,78 +131,70 @@ class EAUNet(nn.Module):
     ):
         super().__init__()
         self.classes = classes
+        weights = "imagenet" if pretrained else None
 
-        # 1. Backbone Encoder
-        self.encoder = timm.create_model(backbone, pretrained=pretrained, in_chans=in_channels, features_only=True)
-        enc_channels = self.encoder.feature_info.channels()
-        c0_ch, c1_ch, c2_ch, c3_ch, c4_ch = enc_channels
+        # 1. Lõi U-Net chuẩn từ segmentation_models_pytorch (6 tầng đặc trưng)
+        self.base_unet = smp.Unet(
+            encoder_name=backbone,
+            encoder_weights=weights,
+            in_channels=in_channels,
+            classes=classes,
+            activation=None,
+        )
+        # Tham chiếu trực tiếp encoder & final_conv để tương thích hoàn toàn với Grad-CAM và Unit Tests
+        self.encoder = self.base_unet.encoder
+        self.final_conv = self.base_unet.segmentation_head[0]
 
-        # 2. Decoder Stages
-        self.up4 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.dec4 = DoubleConv(c4_ch + c3_ch, 256)
+        # Số kênh tầng giải mã cuối của smp.Unet (mặc định = 16) và tầng skip nông c1 (ResNet-34 = 64)
+        dec_ch = 16
+        enc_out_channels = list(self.encoder.out_channels)
+        c0_ch = enc_out_channels[0]  # 3 (full-res input skip)
+        c1_ch = enc_out_channels[1]  # 64 (H/2 skip)
 
-        self.up3 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.dec3 = DoubleConv(256 + c2_ch, 128)
+        # 2. Dual-Branch Erythema & Core Refinement ở độ phân giải gốc (H x W)
+        self.core_branch = CoreLesionBranch(in_ch=dec_ch, out_ch=dec_ch)
+        self.boundary_branch = ErythemaBoundaryBranch(in_ch=c0_ch + c1_ch, out_ch=dec_ch)
+        self.boundary_head = nn.Conv2d(dec_ch, classes, kernel_size=1)
+        self.gated_fusion = GatedFusionModule(channels=dec_ch)
 
-        self.up2 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.dec2 = DoubleConv(128 + c1_ch, 64)
+        # 3. Hệ số phần dư Near-Zero Init (0.01): bảo toàn nền tảng U-Net gốc ngay từ Epoch 1
+        self.gamma = nn.Parameter(torch.tensor(0.01, dtype=torch.float32))
 
-        self.up1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.dec1 = DoubleConv(64 + c0_ch, 32)
-
-        # 3. Dual-Branch Refinement at H/2 Resolution
-        self.core_branch = CoreLesionBranch(in_ch=32, out_ch=32)
-        self.boundary_branch = ErythemaBoundaryBranch(in_ch=c0_ch, out_ch=32)
-        self.boundary_head = nn.Conv2d(32, classes, kernel_size=1)
-        self.gated_fusion = GatedFusionModule(channels=32)
-        self.up_bnd = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-
-        # 4. Final Head at Original Resolution (H x W)
-        self.up0 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-        self.dec0 = DoubleConv(32, 16)
-        self.final_conv = nn.Conv2d(16, classes, kernel_size=1)
-
-    def _cat_skip(self, up_feat: torch.Tensor, skip_feat: torch.Tensor) -> torch.Tensor:
-        if up_feat.shape[2:] != skip_feat.shape[2:]:
-            up_feat = F.interpolate(up_feat, size=skip_feat.shape[2:], mode='bilinear', align_corners=False)
-        return torch.cat([up_feat, skip_feat], dim=1)
+    def _decode_smp(self, features: list) -> torch.Tensor:
+        """Tương thích cả SMP >= 0.4 (nhận list) lẫn SMP 0.3.x (nhận *features)."""
+        try:
+            return self.base_unet.decoder(features)
+        except TypeError:
+            return self.base_unet.decoder(*features)
 
     def forward(
         self,
         x: torch.Tensor,
         return_boundary: Optional[bool] = None
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        # Encoder
-        c0, c1, c2, c3, c4 = self.encoder(x)
+        # 1. Trích xuất 6 mức đặc trưng [x_in, c1, c2, c3, c4, c5] và giải mã U-Net chuẩn
+        features = self.encoder(x)
+        dec_feat = self._decode_smp(features)  # (B, 16, H, W)
 
-        # Expansive path
-        d4 = self.dec4(self._cat_skip(self.up4(c4), c3))
-        d3 = self.dec3(self._cat_skip(self.up3(d4), c2))
-        d2 = self.dec2(self._cat_skip(self.up2(d3), c1))
-        d1 = self.dec1(self._cat_skip(self.up1(d2), c0))  # Shape (B, 32, H/2, W/2)
+        # 2. Nhánh lõi (trường thụ cảm rộng d=2) và nhánh viền ban đỏ (RGB gốc + c1 nông)
+        f_core = self.core_branch(dec_feat)
 
-        # Dual-Branch Processing
-        f_core = self.core_branch(d1)
-        f_bnd = self.boundary_branch(c0)
-        if f_bnd.shape[2:] != f_core.shape[2:]:
-            f_bnd = F.interpolate(f_bnd, size=f_core.shape[2:], mode='bilinear', align_corners=False)
+        c0_full = features[0]
+        c1_up = F.interpolate(features[1], size=dec_feat.shape[2:], mode="bilinear", align_corners=False)
+        if c0_full.shape[2:] != dec_feat.shape[2:]:
+            c0_full = F.interpolate(c0_full, size=dec_feat.shape[2:], mode="bilinear", align_corners=False)
+        f_bnd = self.boundary_branch(torch.cat([c0_full, c1_up], dim=1))
 
-        # Residual Gated Fusion
-        f_fused = self.gated_fusion(f_core, f_bnd)
+        # 3. Hợp nhất phần dư có kiểm soát (Near-Zero Residual Refinement)
+        delta = self.gated_fusion(f_core, f_bnd)
+        refined_feat = dec_feat + self.gamma * delta
+        mask_logits = self.base_unet.segmentation_head(refined_feat)
 
-        # Upsample về độ phân giải gốc H x W
-        u0 = self.up0(f_fused)
-        if u0.shape[2:] != x.shape[2:]:
-            u0 = F.interpolate(u0, size=x.shape[2:], mode='bilinear', align_corners=False)
-        out = self.dec0(u0)
-        mask_logits = self.final_conv(out)
-
-        # Xác định chế độ xuất viền (trong train mode hoặc khi được yêu cầu)
         need_bnd = return_boundary if return_boundary is not None else self.training
         if need_bnd:
-            bnd_logits = self.boundary_head(self.up_bnd(f_bnd))
+            bnd_logits = self.boundary_head(f_bnd)
             if bnd_logits.shape[2:] != x.shape[2:]:
-                bnd_logits = F.interpolate(bnd_logits, size=x.shape[2:], mode='bilinear', align_corners=False)
+                bnd_logits = F.interpolate(bnd_logits, size=x.shape[2:], mode="bilinear", align_corners=False)
             return mask_logits, bnd_logits
 
         return mask_logits

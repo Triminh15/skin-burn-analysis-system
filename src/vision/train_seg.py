@@ -74,9 +74,11 @@ def train_one_epoch(
     dataloader: DataLoader,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
-    device: torch.device
+    device: torch.device,
+    bnd_criterion: nn.Module = None,
+    bnd_weight: float = 0.2,
 ) -> Tuple[float, float, float]:
-    """Huấn luyện mô hình qua 1 Epoch (hỗ trợ Deep Boundary Supervision)."""
+    """Huấn luyện mô hình qua 1 Epoch (hỗ trợ Deep Boundary Supervision ổn định)."""
     model.train()
     running_loss = 0.0
     tracker = SegmentationMetricTracker()
@@ -89,13 +91,14 @@ def train_one_epoch(
         optimizer.zero_grad()
         outputs = model(images)
 
-        # Hỗ trợ Deep Boundary Supervision cho EA-UNet
+        # Hỗ trợ Deep Boundary Supervision cho EA-UNet (luôn dùng ComboLoss ổn định cho viền mỏng)
         if isinstance(outputs, tuple):
             mask_logits, bnd_logits = outputs
             loss_mask = criterion(mask_logits, masks)
             bnd_targets = extract_boundary_mask_gpu(masks)
-            loss_bnd = criterion(bnd_logits, bnd_targets)
-            loss = loss_mask + 0.4 * loss_bnd
+            aux_fn = bnd_criterion if bnd_criterion is not None else criterion
+            loss_bnd = aux_fn(bnd_logits, bnd_targets)
+            loss = loss_mask + bnd_weight * loss_bnd
             logits = mask_logits
         else:
             logits = outputs
@@ -113,25 +116,55 @@ def train_one_epoch(
     return epoch_loss, metrics["dice"], metrics["iou"]
 
 
+def forward_seg_tta(model: nn.Module, images: torch.Tensor) -> torch.Tensor:
+    """
+    Test-Time Augmentation (4x Flip Averaging: Gốc, Lật ngang, Lật dọc, Lật 2 chiều).
+    Tăng độ mượt và chính xác ranh giới quầng bỏng mà không phát sinh thêm tham số.
+    """
+    out0 = model(images)
+    logits0 = out0[0] if isinstance(out0, tuple) else out0
+    p0 = torch.sigmoid(logits0)
+
+    img_h = torch.flip(images, dims=[3])
+    out_h = model(img_h)
+    p_h = torch.flip(torch.sigmoid(out_h[0] if isinstance(out_h, tuple) else out_h), dims=[3])
+
+    img_v = torch.flip(images, dims=[2])
+    out_v = model(img_v)
+    p_v = torch.flip(torch.sigmoid(out_v[0] if isinstance(out_v, tuple) else out_v), dims=[2])
+
+    img_hv = torch.flip(images, dims=[2, 3])
+    out_hv = model(img_hv)
+    p_hv = torch.flip(torch.sigmoid(out_hv[0] if isinstance(out_hv, tuple) else out_hv), dims=[2, 3])
+
+    p_mean = 0.25 * (p0 + p_h + p_v + p_hv)
+    return torch.logit(p_mean.clamp(1e-6, 1.0 - 1e-6))
+
+
 def validate(
     model: nn.Module,
     dataloader: DataLoader,
     criterion: nn.Module,
-    device: torch.device
+    device: torch.device,
+    use_tta: bool = False,
 ) -> Tuple[float, float, float, float]:
-    """Đánh giá mô hình trên tập Validation hoặc Test."""
+    """Đánh giá mô hình trên tập Validation hoặc Test (hỗ trợ TTA 4 hướng)."""
     model.eval()
     running_loss = 0.0
     tracker = SegmentationMetricTracker()
 
     with torch.no_grad():
-        pbar = tqdm(dataloader, desc="  Eval ", leave=False, dynamic_ncols=True)
+        desc_str = "  TTA  " if use_tta else "  Eval "
+        pbar = tqdm(dataloader, desc=desc_str, leave=False, dynamic_ncols=True)
         for batch in pbar:
             images = batch["image"].to(device)
             masks = batch["mask"].to(device)
 
-            outputs = model(images)
-            logits = outputs[0] if isinstance(outputs, tuple) else outputs
+            if use_tta:
+                logits = forward_seg_tta(model, images)
+            else:
+                outputs = model(images)
+                logits = outputs[0] if isinstance(outputs, tuple) else outputs
             loss = criterion(logits, masks)
 
             running_loss += loss.item() * images.size(0)
@@ -186,6 +219,8 @@ def main():
     parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone encoder (resnet34, tu-convnext_tiny)")
     parser.add_argument("--attention", type=str, default="none", choices=["none", "scse"], help="Cơ chế Attention Gate")
     parser.add_argument("--loss", type=str, default="combo", choices=["combo", "focal_tversky"], help="Hàm mất mát")
+    parser.add_argument("--bnd-weight", "--bnd_weight", type=float, default=0.2, help="Trọng số giám sát viền ban đỏ cho EA-UNet")
+    parser.add_argument("--no-tta", action="store_true", help="Tắt đánh giá bổ sung 4x Test-Time Augmentation (TTA) trên tập Test")
     parser.add_argument("--epochs", type=int, default=35, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate khởi tạo")
@@ -282,6 +317,7 @@ def main():
     print(f"  -> Tổng số tham số: {total_params / 1e6:.2f}M ({trainable_params / 1e6:.2f}M cần huấn luyện)")
 
     criterion = get_segmentation_loss(name=args.loss)
+    bnd_criterion = get_segmentation_loss(name="combo")
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
 
@@ -311,7 +347,8 @@ def main():
 
         # Huấn luyện 1 epoch
         train_loss, train_dice, train_iou = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model, train_loader, criterion, optimizer, device,
+            bnd_criterion=bnd_criterion, bnd_weight=args.bnd_weight,
         )
 
         # Đánh giá trên tập Validation
@@ -380,8 +417,14 @@ def main():
         print("• Cảnh báo: Không tìm thấy checkpoint tốt nhất, dùng trọng số epoch cuối.")
 
     test_loss, test_dice, test_iou, test_acc = validate(
-        model, test_loader, criterion, device
+        model, test_loader, criterion, device, use_tta=False
     )
+
+    tta_dice, tta_iou, tta_acc = None, None, None
+    if not args.no_tta:
+        _, tta_dice, tta_iou, tta_acc = validate(
+            model, test_loader, criterion, device, use_tta=True
+        )
 
     test_results = {
         "run_name": args.run_name,
@@ -395,6 +438,8 @@ def main():
         "test_dice": round(test_dice, 4),
         "test_iou": round(test_iou, 4),
         "test_pixel_accuracy": round(test_acc, 4),
+        "test_dice_tta": round(tta_dice, 4) if tta_dice is not None else None,
+        "test_iou_tta": round(tta_iou, 4) if tta_iou is not None else None,
         "training_time_minutes": round(total_training_time / 60, 2),
     }
 
@@ -405,12 +450,15 @@ def main():
     print(f"┌───────────────────────────────┬───────────────────────────────┐")
     print(f"│ Chỉ số Đánh giá               │ Giá trị đạt được              │")
     print(f"├───────────────────────────────┼───────────────────────────────┤")
-    print(f"│ 1. Test Dice Score (F1)       │ {test_dice * 100:6.2f}%                       │")
+    print(f"│ 1. Test Dice Score (Standard) │ {test_dice * 100:6.2f}%                       │")
     print(f"│ 2. Test IoU (Jaccard Index)   │ {test_iou * 100:6.2f}%                       │")
-    print(f"│ 3. Test Pixel Accuracy        │ {test_acc * 100:6.2f}%                       │")
-    print(f"│ 4. Test Loss                  │ {test_loss:6.4f}                         │")
-    print(f"│ 5. Best Val Dice              │ {best_val_dice * 100:6.2f}%                       │")
-    print(f"│ 6. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
+    if tta_dice is not None:
+        print(f"│ 3. Test Dice (+4x TTA)        │ {tta_dice * 100:6.2f}%                       │")
+        print(f"│ 4. Test IoU (+4x TTA)         │ {tta_iou * 100:6.2f}%                       │")
+    print(f"│ 5. Test Pixel Accuracy        │ {test_acc * 100:6.2f}%                       │")
+    print(f"│ 6. Test Loss                  │ {test_loss:6.4f}                         │")
+    print(f"│ 7. Best Val Dice              │ {best_val_dice * 100:6.2f}%                       │")
+    print(f"│ 8. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
     print(f"└───────────────────────────────┴───────────────────────────────┘")
     print(f"💾 File kết quả JSON đã lưu tại: {test_json_path}")
     print("=" * 75)

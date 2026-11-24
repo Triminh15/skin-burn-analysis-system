@@ -33,6 +33,14 @@ SEGMENTATION_MODELS = {
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "unet_resnet34_focal_tversky_best.pth"),
         "metrics_file": os.path.join(FIGURES_DIR, "unet_resnet34_focal_tversky_test_results.json"),
     },
+    "ea_unet_v3_smp_residual": {
+        "name": "EA-UNet v3 (SMP-Anchored Residual · Combo Loss)",
+        "arch": "ea_unet",
+        "backbone": "resnet34",
+        "attention": "none",
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "run_ea_unet_v3_smp_residual_best.pth"),
+        "metrics_file": os.path.join(FIGURES_DIR, "run_ea_unet_v3_smp_residual_test_results.json"),
+    },
     "ea_unet_v2_bnd_supervision": {
         "name": "EA-UNet v2 (Boundary Supervision · Combo Loss)",
         "arch": "ea_unet",
@@ -90,6 +98,12 @@ CLASSIFICATION_MODELS = {
         "model_name": "resnet34",
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "cls_resnet34_weighted_ce_best.pth"),
         "metrics_file": os.path.join(FIGURES_DIR, "cls_resnet34_weighted_ce_test_results.json"),
+    },
+    "cls_resnet34_redl_exp": {
+        "name": "ResNet-34 (Relaxed Log-Evidence EDL)",
+        "model_name": "resnet34",
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "classifier", "run_m1_classifier_redl_exp_best.pth"),
+        "metrics_file": os.path.join(CHECKPOINTS_DIR, "classifier", "figures", "run_m1_classifier_redl_exp_test_results.json"),
     },
     "cls_resnet34_cb_focal": {
         "name": "ResNet-34 (CB Focal)",

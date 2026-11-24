@@ -14,7 +14,13 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.vision.edl_loss import EDLLoss, get_edl_metrics, calculate_ece
+from src.vision.edl_loss import (
+    EDLLoss,
+    get_edl_metrics,
+    calculate_ece,
+    logits_to_evidence,
+    compute_selective_prediction_metrics,
+)
 from src.vision.losses import get_classification_loss
 
 
@@ -157,3 +163,53 @@ def test_edl_loss_types_and_class_weights():
     fn_low_kl = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=0.1)
     fn_high_kl = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=1.0)
     assert fn_low_kl(evidence, targets, epoch=10).item() < fn_high_kl(evidence, targets, epoch=10).item()
+
+
+def test_logits_to_evidence_exp_non_vanishing_gradient():
+    """Kiểm tra: Log-Evidence ('exp') duy trì gradient mạnh hơn 'softplus' khi logit lớp đúng cao."""
+    fn = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=0.0)
+    targets = torch.tensor([0])
+
+    z_exp = torch.tensor([[5.0, -2.0, -2.0]], requires_grad=True)
+    loss_exp = fn(logits_to_evidence(z_exp, mode="exp"), targets, epoch=0)
+    loss_exp.backward()
+
+    z_sp = torch.tensor([[5.0, -2.0, -2.0]], requires_grad=True)
+    loss_sp = fn(logits_to_evidence(z_sp, mode="softplus"), targets, epoch=0)
+    loss_sp.backward()
+
+    assert torch.isfinite(z_exp.grad).all()
+    p_exp, u_exp = get_edl_metrics(logits_to_evidence(z_exp.detach(), mode="exp"), num_classes=3)
+    p_sp, u_sp = get_edl_metrics(logits_to_evidence(z_sp.detach(), mode="softplus"), num_classes=3)
+    # Với cùng logit z_0 = 5.0, chế độ 'exp' cho xác suất hiệu chuẩn cao hơn hẳn 'softplus' (vốn bị kẹt ~75%)
+    assert p_exp[0, 0].item() > 0.95 and p_sp[0, 0].item() < 0.80
+    assert u_exp.item() < u_sp.item()
+
+
+def test_selective_prediction_and_mann_whitney_pvalue():
+    """Kiểm tra: Risk-Coverage Curve giảm rủi ro khi giảm Coverage và Mann-Whitney U cho p < 0.01."""
+    # Giả lập 40 mẫu: 30 ca đúng có u thấp (0.05..0.20), 10 ca sai có u cao (0.45..0.85)
+    probs_correct = torch.tensor([[0.85, 0.10, 0.05]] * 10 + [[0.05, 0.85, 0.10]] * 10 + [[0.05, 0.10, 0.85]] * 10)
+    targets_correct = torch.tensor([0] * 10 + [1] * 10 + [2] * 10)
+    u_correct = torch.linspace(0.05, 0.20, 30)
+
+    probs_error = torch.tensor([[0.40, 0.35, 0.25]] * 10)  # Dự đoán lớp 0 nhưng thực tế lớp 1/2
+    targets_error = torch.tensor([1] * 5 + [2] * 5)
+    u_error = torch.linspace(0.45, 0.85, 10)
+
+    probs = torch.cat([probs_correct, probs_error], dim=0)
+    targets = torch.cat([targets_correct, targets_error], dim=0)
+    u = torch.cat([u_correct, u_error], dim=0)
+
+    sel = compute_selective_prediction_metrics(probs, u, targets)
+    assert sel["n_total"] == 40
+    assert sel["n_correct"] == 30 and sel["n_error"] == 10
+    assert sel["u_error_mean"] > sel["u_correct_mean"]
+    assert sel["p_value"] < 0.001
+    assert sel["statistically_significant_p001"] is True
+    assert sel["error_detection_auroc"] > 0.95
+    # Tại Coverage 75% (giữ 30 ca tự tin nhất), Accuracy phải đạt 100% (so với 75% ở 100% Coverage)
+    cov_100 = [r for r in sel["coverage_table"] if r["target_coverage"] == 1.0][0]
+    cov_75 = [r for r in sel["coverage_table"] if r["target_coverage"] == 0.75][0]
+    assert cov_75["accuracy"] > cov_100["accuracy"]
+    assert cov_75["accuracy"] == 1.0

@@ -44,7 +44,12 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 from src.vision.losses import get_classification_loss
-from src.vision.edl_loss import get_edl_metrics, calculate_ece
+from src.vision.edl_loss import (
+    get_edl_metrics,
+    calculate_ece,
+    logits_to_evidence,
+    compute_selective_prediction_metrics,
+)
 from src.vision.metrics import ClassificationMetricTracker
 from src.vision.models import build_classification_model, count_parameters
 
@@ -145,7 +150,8 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device,
     epoch: int = 1,
-    is_edl: bool = False
+    is_edl: bool = False,
+    edl_activation: str = "exp",
 ) -> Tuple[float, float, float]:
     model.train()
     running_loss = 0.0
@@ -160,7 +166,7 @@ def train_one_epoch(
         logits = model(images)
 
         if is_edl:
-            evidence = F.softplus(logits)
+            evidence = logits_to_evidence(logits, mode=edl_activation)
             loss = criterion(evidence, targets, epoch=epoch)
             prob, _ = get_edl_metrics(evidence, num_classes=logits.size(1))
             tracker.update(prob, targets)
@@ -185,7 +191,9 @@ def validate(
     criterion: nn.Module,
     device: torch.device,
     epoch: int = 1,
-    is_edl: bool = False
+    is_edl: bool = False,
+    edl_activation: str = "exp",
+    return_selective: bool = False,
 ) -> Tuple[float, Dict[str, Any]]:
     model.eval()
     running_loss = 0.0
@@ -202,7 +210,7 @@ def validate(
             logits = model(images)
 
             if is_edl:
-                evidence = F.softplus(logits)
+                evidence = logits_to_evidence(logits, mode=edl_activation)
                 loss = criterion(evidence, targets, epoch=epoch)
                 prob, u = get_edl_metrics(evidence, num_classes=logits.size(1))
                 all_probs.append(prob.cpu())
@@ -229,6 +237,10 @@ def validate(
     if is_edl and len(all_uncertainties) > 0:
         stacked_u = torch.cat(all_uncertainties, dim=0)
         metrics["mean_uncertainty"] = round(float(stacked_u.mean().item()), 4)
+        if return_selective:
+            metrics["selective"] = compute_selective_prediction_metrics(
+                stacked_probs, stacked_u, y_true
+            )
 
     return eval_loss, metrics
 
@@ -311,7 +323,8 @@ def main():
     parser.add_argument("--loss", type=str, default="weighted_ce", choices=["weighted_ce", "cb_focal", "edl"], help="Hàm mất mát")
     parser.add_argument("--annealing-epochs", "--annealing_epochs", type=int, default=10, help="Số epoch annealing cho EDL Loss")
     parser.add_argument("--edl-type", "--edl_type", type=str, default="digamma", choices=["digamma", "log", "mse"], help="Dạng Bayes Risk cho EDL (digamma tối ưu nhất)")
-    parser.add_argument("--kl-weight", "--kl_weight", type=float, default=0.2, help="Trọng số cực đại phạt KL trong EDL (tránh triệt tiêu evidence)")
+    parser.add_argument("--edl-activation", "--edl_activation", type=str, default="exp", choices=["exp", "softplus"], help="Hàm ánh xạ logits->evidence: 'exp' (Log-Evidence chống bão hòa đạo hàm) hoặc 'softplus'")
+    parser.add_argument("--kl-weight", "--kl_weight", type=float, default=0.05, help="Trọng số cực đại phạt KL trong EDL (0.05 cân bằng tối ưu Accuracy & Uncertainty)")
     parser.add_argument("--no-class-weights", "--no_class_weights", action="store_true", help="Tắt trọng số đền bù mất cân bằng lớp cho EDL")
     parser.add_argument("--epochs", type=int, default=30, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
@@ -392,7 +405,7 @@ def main():
             use_class_weights=not args.no_class_weights,
         ).to(device)
         cw_str = [round(w, 3) for w in criterion.class_weights.tolist()] if criterion.class_weights is not None else "None"
-        print(f"  -> EDL Config: type={args.edl_type} | kl_weight={args.kl_weight} | class_weights={cw_str}")
+        print(f"  -> EDL Config: type={args.edl_type} | act={args.edl_activation} | kl_weight={args.kl_weight} | class_weights={cw_str}")
     else:
         criterion = get_classification_loss(
             name=args.loss,
@@ -429,10 +442,12 @@ def main():
         epoch_start = time.time()
 
         train_loss, train_acc, train_f1 = train_one_epoch(
-            model, train_loader, criterion, optimizer, device, epoch=epoch, is_edl=is_edl
+            model, train_loader, criterion, optimizer, device,
+            epoch=epoch, is_edl=is_edl, edl_activation=args.edl_activation,
         )
         val_loss, val_metrics = validate(
-            model, val_loader, criterion, device, epoch=epoch, is_edl=is_edl
+            model, val_loader, criterion, device,
+            epoch=epoch, is_edl=is_edl, edl_activation=args.edl_activation,
         )
 
         scheduler.step()
@@ -500,13 +515,33 @@ def main():
         print(f"• Đang nạp mô hình xuất sắc nhất từ: {best_checkpoint_path}")
         model.load_state_dict(torch.load(best_checkpoint_path, map_location=device))
 
-    test_loss, test_metrics = validate(model, test_loader, criterion, device, epoch=args.epochs, is_edl=is_edl)
+    test_loss, test_metrics = validate(
+        model, test_loader, criterion, device,
+        epoch=args.epochs, is_edl=is_edl, edl_activation=args.edl_activation, return_selective=is_edl,
+    )
     plot_confusion_matrix(test_metrics["confusion_matrix"], cm_png_path, args.run_name)
+
+    selective_summary = None
+    selective_png_path = os.path.join(figures_dir, f"{args.run_name}_selective_triage_q1.png")
+    if is_edl and "selective" in test_metrics:
+        sel = test_metrics["selective"]
+        selective_summary = {k: v for k, v in sel.items() if not k.startswith("raw_")}
+        try:
+            from tools.evaluate_selective_prediction import (
+                plot_selective_prediction_figure,
+                print_selective_triage_report,
+            )
+            plot_selective_prediction_figure(sel, selective_png_path, title_prefix=args.run_name)
+            print_selective_triage_report(sel, ece=test_metrics.get("ece"))
+            print(f"📈 Biểu đồ Risk-Coverage & Phân phối u (Q1/Q2): {selective_png_path}")
+        except Exception as exc:
+            print(f"[Cảnh báo] Không thể vẽ biểu đồ Selective Triage: {exc}")
 
     test_results = {
         "run_name": args.run_name,
         "model": args.model,
         "loss_fn": args.loss,
+        "edl_activation": args.edl_activation if is_edl else None,
         "parameters_m": round(total_params / 1e6, 2),
         "best_val_macro_f1": round(best_val_macro_f1, 4),
         "test_loss": round(test_loss, 4),
@@ -516,6 +551,7 @@ def main():
         "test_recall_degree_3": test_metrics["recall_degree_3"],
         "test_ece": test_metrics.get("ece", None),
         "test_mean_uncertainty": test_metrics.get("mean_uncertainty", None),
+        "selective_prediction": selective_summary,
         "confusion_matrix": test_metrics["confusion_matrix"],
         "per_class_results": test_metrics["per_class"],
         "training_time_minutes": round(total_training_time / 60, 2)
