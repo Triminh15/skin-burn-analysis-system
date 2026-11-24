@@ -186,15 +186,47 @@ def print_selective_triage_report(sel: Dict[str, Any], ece: float = None) -> Non
     print("└───────────┴────────────┴─────────────┴───────────┴───────────┴───────────────┴────────────┘")
 
 
+def _infer_probs_and_u(
+    model: torch.nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    edl_activation: str,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    all_probs, all_u, all_y = [], [], []
+    with torch.no_grad():
+        for batch in loader:
+            images = batch["image"].to(device)
+            targets = batch["severity"].to(device)
+            logits = model(images)
+            evidence = logits_to_evidence(logits, mode=edl_activation)
+            prob, u = get_edl_metrics(evidence, num_classes=3)
+            all_probs.append(prob.cpu())
+            all_u.append(u.cpu())
+            all_y.append(targets.cpu())
+    return torch.cat(all_probs, dim=0), torch.cat(all_u, dim=0), torch.cat(all_y, dim=0)
+
+
+def _apply_deg3_cost_weight(probs: torch.Tensor, deg3_cost: float) -> torch.Tensor:
+    if abs(deg3_cost - 1.0) < 1e-6:
+        return probs
+    w = torch.tensor([1.0, 1.0, float(deg3_cost)], dtype=probs.dtype, device=probs.device).view(1, 3)
+    scaled = probs * w
+    return scaled / scaled.sum(dim=-1, keepdim=True).clamp_min(1e-8)
+
+
 def evaluate_checkpoint(
     checkpoint_path: str,
     csv_path: str = "data/splits/test_roi.csv",
+    val_csv_path: str = "data/splits/val_roi.csv",
     model_name: str = "resnet34",
     edl_activation: str = "exp",
+    calibrate_deg3_on_val: bool = False,
     img_size: int = 224,
     batch_size: int = 16,
     output_dir: str = "outputs/figures",
 ) -> Dict[str, Any]:
+    from sklearn.metrics import f1_score, recall_score
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dataset = BurnROIDataset(csv_path=csv_path, transform=get_cls_val_transforms(img_size=img_size))
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -209,25 +241,31 @@ def evaluate_checkpoint(
     model.load_state_dict(state)
     model.eval()
 
-    all_probs, all_u, all_y = [], [], []
-    with torch.no_grad():
-        for batch in loader:
-            images = batch["image"].to(device)
-            targets = batch["severity"].to(device)
-            logits = model(images)
-            evidence = logits_to_evidence(logits, mode=edl_activation)
-            prob, u = get_edl_metrics(evidence, num_classes=3)
-            all_probs.append(prob.cpu())
-            all_u.append(u.cpu())
-            all_y.append(targets.cpu())
+    best_deg3_cost = 1.0
+    if calibrate_deg3_on_val and os.path.exists(val_csv_path):
+        val_ds = BurnROIDataset(csv_path=val_csv_path, transform=get_cls_val_transforms(img_size=img_size))
+        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=0)
+        val_probs, _, val_y = _infer_probs_and_u(model, val_loader, device, edl_activation)
+        val_y_np = val_y.numpy()
+        best_score = -1.0
+        for tau in np.linspace(1.0, 2.2, 25):
+            adj_p = _apply_deg3_cost_weight(val_probs, float(tau)).numpy()
+            preds = np.argmax(adj_p, axis=1)
+            vf1 = float(f1_score(val_y_np, preds, average="macro", zero_division=0))
+            vrec3 = float(recall_score(val_y_np, preds, labels=[0, 1, 2], average=None, zero_division=0)[2])
+            score = 0.65 * vf1 + 0.35 * vrec3
+            if score > best_score:
+                best_score = score
+                best_deg3_cost = float(tau)
+        print(f"🎯 [Val Calibration] Hệ số ưu tiên Bayes Độ 3 tối ưu trên tập Validation: c3 = {best_deg3_cost:.2f}")
 
-    probs_t = torch.cat(all_probs, dim=0)
-    u_t = torch.cat(all_u, dim=0)
-    y_t = torch.cat(all_y, dim=0)
+    probs_raw, u_t, y_t = _infer_probs_and_u(model, loader, device, edl_activation)
+    probs_t = _apply_deg3_cost_weight(probs_raw, best_deg3_cost)
 
-    ece = calculate_ece(probs_t, y_t)
+    ece = calculate_ece(probs_raw, y_t)
     sel = compute_selective_prediction_metrics(probs_t, u_t, y_t)
     sel["ece"] = round(ece, 4)
+    sel["deg3_cost_weight_from_val"] = round(best_deg3_cost, 3)
     sel["edl_activation"] = edl_activation
     sel["checkpoint"] = checkpoint_path
 
@@ -251,6 +289,8 @@ def main():
     parser = argparse.ArgumentParser(description="Đánh giá Selective Prediction & Mann-Whitney p-value cho EDL Classifier")
     parser.add_argument("--checkpoint", type=str, required=True, help="Đường dẫn tới file .pth của mô hình EDL")
     parser.add_argument("--csv", type=str, default="data/splits/test_roi.csv", help="File CSV tập đánh giá")
+    parser.add_argument("--val-csv", type=str, default="data/splits/val_roi.csv", help="File CSV tập Validation để hiệu chuẩn c3")
+    parser.add_argument("--calibrate-deg3-on-val", action="store_true", help="Tối ưu trọng số quyết định Bayes cho Độ 3 trên tập Validation (không đụng tập Test)")
     parser.add_argument("--model", type=str, default="resnet34", choices=["resnet34", "convnext_tiny"])
     parser.add_argument("--edl-activation", "--edl_activation", type=str, default="exp", choices=["exp", "softplus"],
                         help="Dùng 'softplus' cho checkpoint M1 cũ hoặc 'exp' cho R-EDL mới")
@@ -262,8 +302,10 @@ def main():
     evaluate_checkpoint(
         checkpoint_path=args.checkpoint,
         csv_path=args.csv,
+        val_csv_path=args.val_csv,
         model_name=args.model,
         edl_activation=args.edl_activation,
+        calibrate_deg3_on_val=args.calibrate_deg3_on_val,
         img_size=args.img_size,
         batch_size=args.batch_size,
         output_dir=args.output_dir,
@@ -272,3 +314,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

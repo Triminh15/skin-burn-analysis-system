@@ -213,3 +213,19 @@ def test_selective_prediction_and_mann_whitney_pvalue():
     cov_75 = [r for r in sel["coverage_table"] if r["target_coverage"] == 0.75][0]
     assert cov_75["accuracy"] > cov_100["accuracy"]
     assert cov_75["accuracy"] == 1.0
+
+
+def test_asymmetric_kl_protects_minority_class():
+    """Kiểm tra: Asymmetric Class-Balanced KL phạt nhẹ hơn với bằng chứng nhầm sang lớp hiếm Độ 3 (cw cao)."""
+    cw = torch.tensor([0.8, 0.8, 2.5])
+    fn = EDLLoss(num_classes=3, annealing_epochs=10, loss_type="digamma", kl_weight=0.2, class_weights=cw)
+
+    # Cùng nhãn thật là lớp 1 (Độ 2): mẫu A nghi ngờ sang lớp 0 (đa số), mẫu B nghi ngờ sang lớp 2 (Độ 3 hiếm)
+    ev_spill_to_maj = torch.tensor([[8.0, 10.0, 0.0]])
+    ev_spill_to_min = torch.tensor([[0.0, 10.0, 8.0]])
+    target = torch.tensor([1])
+
+    loss_maj = fn(ev_spill_to_maj, target, epoch=10).item()
+    loss_min = fn(ev_spill_to_min, target, epoch=10).item()
+    # Phạt KL khi nghi ngờ sang Độ 3 phải nhỏ hơn phạt khi nghi ngờ sang Độ 1 để không dập tắt Recall Độ 3
+    assert loss_min < loss_maj

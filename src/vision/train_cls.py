@@ -324,7 +324,8 @@ def main():
     parser.add_argument("--annealing-epochs", "--annealing_epochs", type=int, default=10, help="Số epoch annealing cho EDL Loss")
     parser.add_argument("--edl-type", "--edl_type", type=str, default="digamma", choices=["digamma", "log", "mse"], help="Dạng Bayes Risk cho EDL (digamma tối ưu nhất)")
     parser.add_argument("--edl-activation", "--edl_activation", type=str, default="exp", choices=["exp", "softplus"], help="Hàm ánh xạ logits->evidence: 'exp' (Log-Evidence chống bão hòa đạo hàm) hoặc 'softplus'")
-    parser.add_argument("--kl-weight", "--kl_weight", type=float, default=0.05, help="Trọng số cực đại phạt KL trong EDL (0.05 cân bằng tối ưu Accuracy & Uncertainty)")
+    parser.add_argument("--kl-weight", "--kl_weight", type=float, default=0.04, help="Trọng số cực đại phạt KL trong EDL (0.04 cân bằng tối ưu Accuracy & Uncertainty)")
+    parser.add_argument("--deg3-boost", "--deg3_boost", type=float, default=1.35, help="Hệ số ưu tiên lâm sàng bổ sung cho ca nguy kịch Bỏng Độ 3 trong EDL")
     parser.add_argument("--no-class-weights", "--no_class_weights", action="store_true", help="Tắt trọng số đền bù mất cân bằng lớp cho EDL")
     parser.add_argument("--epochs", type=int, default=30, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
@@ -395,6 +396,13 @@ def main():
         class_counts = [359, 346, 153]
 
     if is_edl:
+        custom_cw = None
+        if not args.no_class_weights:
+            total_n = sum(class_counts)
+            base_w = [total_n / (3.0 * n) if n > 0 else 1.0 for n in class_counts]
+            base_w[2] = base_w[2] * float(args.deg3_boost)
+            custom_cw = torch.tensor(base_w, dtype=torch.float32)
+
         criterion = get_classification_loss(
             name=args.loss,
             samples_per_class=class_counts,
@@ -402,10 +410,11 @@ def main():
             annealing_epochs=args.annealing_epochs,
             loss_type=args.edl_type,
             kl_weight=args.kl_weight,
+            class_weights=custom_cw,
             use_class_weights=not args.no_class_weights,
         ).to(device)
         cw_str = [round(w, 3) for w in criterion.class_weights.tolist()] if criterion.class_weights is not None else "None"
-        print(f"  -> EDL Config: type={args.edl_type} | act={args.edl_activation} | kl_weight={args.kl_weight} | class_weights={cw_str}")
+        print(f"  -> EDL Config: type={args.edl_type} | act={args.edl_activation} | kl_weight={args.kl_weight} | deg3_boost={args.deg3_boost} | class_weights={cw_str}")
     else:
         criterion = get_classification_loss(
             name=args.loss,
@@ -432,6 +441,7 @@ def main():
         history["val_ece"] = []
 
     best_val_macro_f1 = 0.0
+    best_selection_score = 0.0
     patience_counter = 0
     start_time = time.time()
 
@@ -470,14 +480,17 @@ def main():
             history["val_ece"].append(val_metrics.get("ece", 0.0))
 
         improved_str = ""
-        # Tiêu chí chọn Best Model: Dựa vào Macro F1 (chống mất cân bằng)
-        if val_f1 > best_val_macro_f1:
-            diff = val_f1 - best_val_macro_f1
-            best_val_macro_f1 = val_f1
+        # Với EDL lâm sàng: kết hợp 70% Val Macro F1 + 30% Val Recall Độ 3 để không bao giờ chọn epoch bỏ sót ca nguy kịch
+        selection_score = (0.70 * val_f1 + 0.30 * val_rec3) if is_edl else val_f1
+        if selection_score > best_selection_score:
+            diff = selection_score - best_selection_score
+            best_selection_score = selection_score
+            best_val_macro_f1 = max(best_val_macro_f1, val_f1)
             patience_counter = 0
             torch.save(model.state_dict(), best_checkpoint_path)
-            improved_str = f" 🔥 [KỶ LỤC MỚI: Macro F1={val_f1:.4f} (+{diff:.4f}) -> Đã lưu Best Checkpoint]"
+            improved_str = f" 🔥 [KỶ LỤC MỚI: Score={selection_score:.4f} (F1={val_f1:.4f}, Rec3={val_rec3:.4f}, +{diff:.4f}) -> Đã lưu]"
         else:
+            best_val_macro_f1 = max(best_val_macro_f1, val_f1)
             patience_counter += 1
             improved_str = f" (Patience: {patience_counter}/{args.patience})"
 
@@ -519,6 +532,12 @@ def main():
         model, test_loader, criterion, device,
         epoch=args.epochs, is_edl=is_edl, edl_activation=args.edl_activation, return_selective=is_edl,
     )
+    test_fit_loss = None
+    if is_edl:
+        test_fit_loss, _ = validate(
+            model, test_loader, criterion, device,
+            epoch=0, is_edl=True, edl_activation=args.edl_activation, return_selective=False,
+        )
     plot_confusion_matrix(test_metrics["confusion_matrix"], cm_png_path, args.run_name)
 
     selective_summary = None
@@ -571,7 +590,11 @@ def main():
         print(f"│ 4. Calibration ECE            │ {test_metrics['ece'] * 100:6.2f}%                       │")
     if "mean_uncertainty" in test_metrics:
         print(f"│ 5. Mean Uncertainty (u)       │ {test_metrics['mean_uncertainty']:6.4f}                         │")
-    print(f"│ 6. Test Loss                  │ {test_loss:6.4f}                         │")
+    if test_fit_loss is not None:
+        print(f"│ 6a. Test Bayes Fit Loss       │ {test_fit_loss:6.4f} (thuần sai số dự đoán)  │")
+        print(f"│ 6b. Test Total Loss (Fit+KL)  │ {test_loss:6.4f}                         │")
+    else:
+        print(f"│ 6. Test Loss                  │ {test_loss:6.4f}                         │")
     print(f"│ 7. Best Val Macro F1          │ {best_val_macro_f1 * 100:6.2f}%                       │")
     print(f"│ 8. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
     print(f"└───────────────────────────────┴───────────────────────────────┘")

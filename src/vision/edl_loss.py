@@ -160,8 +160,16 @@ class EDLLoss(nn.Module):
         else:
             annealing_coef = self.kl_weight
             
-        # alpha_tilde: loại bỏ phạt với lớp ground truth
-        alpha_tilde = y_one_hot + (1.0 - y_one_hot) * alpha
+        # alpha_tilde: loại bỏ phạt với lớp ground truth VÀ cân bằng bất đối xứng theo tần suất lớp (Asymmetric Class-Balanced KL).
+        # Lớp hiếm/nguy kịch (Bỏng Độ 3 chỉ chiếm ~17.6% mẫu) xuất hiện như "lớp không phải nhãn thật" trên tới 82.4% mẫu Độ 1 & Độ 2;
+        # nếu phạt KL đồng đều với exp(z_k), bằng chứng Độ 3 sẽ bị dập tắt quá mức gây tụt Recall Độ 3.
+        # Nhân tỷ lệ nghịch min(cw)/cw_k giúp cân bằng tần suất bị phạt KL giữa lớp đa số và lớp thiểu số nguy kịch.
+        if self.class_weights is not None:
+            cw_row = self.class_weights.to(evidence.device).view(1, -1)
+            kl_off_scale = torch.clamp(torch.min(cw_row) / (cw_row + 1e-8), min=0.1, max=1.0)
+            alpha_tilde = 1.0 + (1.0 - y_one_hot) * (alpha - 1.0) * kl_off_scale
+        else:
+            alpha_tilde = y_one_hot + (1.0 - y_one_hot) * alpha
         loss_kl = torch.mean(self.kl_divergence(alpha_tilde))
         
         return loss_fit + annealing_coef * loss_kl
