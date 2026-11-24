@@ -45,16 +45,29 @@ CLASS_COLORS = ["#22c55e", "#eab308", "#ef4444"] # Xanh lá - Vàng - Đỏ
 def load_pipeline_models(
     seg_checkpoint: str,
     cls_checkpoint: str,
-    device: str = "cpu"
+    device: str = "cpu",
+    seg_arch: Optional[str] = None,
 ) -> Tuple[torch.nn.Module, torch.nn.Module]:
     """
     Nạp 2 mô hình vô địch tốt nhất của Giai đoạn 1 và Giai đoạn 2.
+    Tự động phát hiện EA-UNet hoặc U-Net thông thường dựa trên checkpoint.
     """
-    print("🧠 Đang nạp mô hình Giai đoạn 1: U-Net (ResNet-34)...")
-    seg_model = build_segmentation_model(arch="unet", backbone="resnet34", classes=1, pretrained=False)
+    state_dict = None
     if os.path.exists(seg_checkpoint):
         checkpoint = torch.load(seg_checkpoint, map_location=device)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
+
+    # Nhận diện kiến trúc tự động nếu không chỉ định rõ
+    if seg_arch is None:
+        if state_dict is not None and any("core_branch" in k or "gated_fusion" in k for k in state_dict.keys()):
+            seg_arch = "ea_unet"
+        else:
+            seg_arch = "unet"
+
+    arch_display = "EA-UNet (Dual-Branch)" if seg_arch == "ea_unet" else "U-Net"
+    print(f"🧠 Đang nạp mô hình Giai đoạn 1: {arch_display} (ResNet-34)...")
+    seg_model = build_segmentation_model(arch=seg_arch, backbone="resnet34", classes=1, pretrained=False)
+    if state_dict is not None:
         seg_model.load_state_dict(state_dict)
         print(f"  -> Đã nạp thành công Checkpoint Phân đoạn: {seg_checkpoint}")
     else:

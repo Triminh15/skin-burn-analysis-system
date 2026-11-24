@@ -149,7 +149,13 @@ def plot_training_curves(history: Dict[str, list], save_path: str, run_name: str
 
 def main():
     parser = argparse.ArgumentParser(description="Script Huấn luyện Phân đoạn Vết bỏng (Segmentation Training)")
-    parser.add_argument("--arch", type=str, default="unet", choices=["unet", "unetplusplus"], help="Kiến trúc mô hình")
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default="ea_unet",
+        choices=["unet", "unetplusplus", "ea_unet", "eaunet", "ea-unet"],
+        help="Kiến trúc mô hình: unet, unetplusplus, hoặc ea_unet (Erythema-Aware Dual-Branch)"
+    )
     parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone encoder (resnet34, tu-convnext_tiny)")
     parser.add_argument("--attention", type=str, default="none", choices=["none", "scse"], help="Cơ chế Attention Gate")
     parser.add_argument("--loss", type=str, default="combo", choices=["combo", "focal_tversky"], help="Hàm mất mát")

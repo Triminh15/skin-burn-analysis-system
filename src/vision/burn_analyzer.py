@@ -102,17 +102,20 @@ class BurnAnalyzer:
 
     def load_models(self):
         """Khởi tạo và nạp trọng số cho cả 2 mô hình theo cấu hình từ config.py"""
-        # 1. Nạp mô hình phân đoạn (U-Net / Attention U-Net)
+        # 1. Nạp mô hình phân đoạn (U-Net / EA-UNet / Attention U-Net)
         if os.path.exists(self.seg_checkpoint):
+            ckpt = torch.load(self.seg_checkpoint, map_location=self.device)
+            state_dict = ckpt.get("model_state_dict", ckpt)
+            arch = self.seg_cfg.get("arch", "unet")
+            if any("core_branch" in k or "gated_fusion" in k for k in state_dict.keys()):
+                arch = "ea_unet"
             self.seg_model = build_segmentation_model(
-                arch=self.seg_cfg["arch"],
+                arch=arch,
                 backbone=self.seg_cfg["backbone"],
-                attention=self.seg_cfg["attention"],
+                attention=self.seg_cfg.get("attention", "none"),
                 classes=1,
                 pretrained=False,
             )
-            ckpt = torch.load(self.seg_checkpoint, map_location=self.device)
-            state_dict = ckpt.get("model_state_dict", ckpt)
             self.seg_model.load_state_dict(state_dict)
             self.seg_model.to(self.device)
             self.seg_model.eval()
