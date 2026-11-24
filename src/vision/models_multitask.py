@@ -74,7 +74,10 @@ class MaskGuidedSpatialAttention(nn.Module):
             down_mask = mask
 
         attn = self.conv(torch.cat([feat, down_mask], dim=1))
-        attended_feat = feat * attn + feat  # Residual attention
+        # Cắt ROI mềm sắc nét (7x foreground-to-background ratio): khuếch đại mạnh vùng tổn thương
+        # theo down_mask + attn và chỉ giữ 25% ngữ cảnh da lành xung quanh làm độ tương phản
+        fg_gate = attn * (0.5 + down_mask)
+        attended_feat = feat * fg_gate + 0.25 * feat
         return attended_feat
 
 

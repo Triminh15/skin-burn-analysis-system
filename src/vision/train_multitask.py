@@ -249,6 +249,8 @@ def train_one_epoch(
 
         # 3. Lan truyền ngược 1 lần duy nhất cập nhật Shared Encoder & các Heads
         loss_total.backward()
+        # Cắt ngưỡng gradient tránh xung nhọn từ Digamma EDL + Class Weights làm hỏng Encoder
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)
         optimizer.step()
 
         # Cập nhật số liệu
@@ -465,28 +467,30 @@ def main():
     parser.add_argument("--use_boundary", "--use-boundary", action="store_true", default=True, help="Bật nhánh viền ban đỏ Dual-Branch (MT-EANet)")
     parser.add_argument("--no_boundary", "--no-boundary", action="store_false", dest="use_boundary", help="Tắt nhánh viền ban đỏ (Multi-Task thuần)")
 
-    # Trọng số Joint Loss (Section 7)
-    parser.add_argument("--w_seg", "--w-seg", type=float, default=1.0, help="Trọng số hàm loss phân đoạn")
-    parser.add_argument("--w_bnd", "--w-bnd", type=float, default=0.3, help="Trọng số hàm loss viền ban đỏ")
-    parser.add_argument("--w_cls", "--w-cls", type=float, default=0.5, help="Trọng số hàm loss phân loại")
+    # Trọng số Joint Loss tối ưu chống Gradient Dominance (cân bằng biên độ Seg vs Weighted Digamma EDL)
+    parser.add_argument("--w_seg", "--w-seg", type=float, default=2.0, help="Trọng số hàm loss phân đoạn (mặc định 2.0 bảo vệ Dice)")
+    parser.add_argument("--w_bnd", "--w-bnd", type=float, default=0.1, help="Trọng số hàm loss viền ban đỏ (mặc định 0.1 tránh nhiễu)")
+    parser.add_argument("--w_cls", "--w-cls", type=float, default=0.15, help="Trọng số hàm loss phân loại tại Encoder (mặc định 0.15 cân bằng Digamma)")
 
     # Cấu hình hàm mất mát
-    parser.add_argument("--seg_loss", "--seg-loss", type=str, default="focal_tversky", choices=["focal_tversky", "combo", "dice"])
+    parser.add_argument("--seg_loss", "--seg-loss", type=str, default="combo", choices=["focal_tversky", "combo", "dice"])
     parser.add_argument("--cls_loss", "--cls-loss", type=str, default="edl", choices=["edl", "ce"])
     parser.add_argument("--no_edl", "--no-edl", action="store_true", help="Tắt EDL, dùng Cross-Entropy thuần (Softmax) cho nhánh phân loại")
     parser.add_argument("--annealing_epochs", "--annealing-epochs", type=int, default=10, help="Số epoch ủ nhiệt cho KL divergence trong EDL")
     parser.add_argument("--edl_type", "--edl-type", type=str, default="digamma", choices=["digamma", "log", "mse"], help="Dạng Bayes Risk cho EDL (digamma tối ưu nhất)")
-    parser.add_argument("--kl_weight", "--kl-weight", type=float, default=0.2, help="Trọng số cực đại phạt KL trong EDL (tránh triệt tiêu evidence)")
+    parser.add_argument("--kl_weight", "--kl-weight", type=float, default=0.15, help="Trọng số cực đại phạt KL trong EDL (tránh triệt tiêu evidence)")
     parser.add_argument("--no_class_weights", "--no-class-weights", action="store_true", help="Tắt trọng số đền bù mất cân bằng lớp")
     parser.add_argument("--boundary_kernel", "--boundary-kernel", type=int, default=5, help="Kích thước kernel hình thái học trích xuất viền")
 
-    # Siêu tham số Huấn luyện
-    parser.add_argument("--epochs", type=int, default=30)
+    # Siêu tham số Huấn luyện & Differential Learning Rates
+    parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch_size", "--batch-size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate gốc cho Shared Encoder")
+    parser.add_argument("--dec_lr_mult", "--dec-lr-mult", type=float, default=3.0, help="Hệ số nhân LR cho Decoder phân đoạn")
+    parser.add_argument("--cls_lr_mult", "--cls-lr-mult", type=float, default=5.0, help="Hệ số nhân LR cho Head phân loại (bù w_cls nhỏ)")
     parser.add_argument("--weight_decay", "--weight-decay", type=float, default=1e-4)
     parser.add_argument("--img_size", "--img-size", type=int, default=256)
-    parser.add_argument("--patience", type=int, default=10, help="Ngưỡng Early Stopping")
+    parser.add_argument("--patience", type=int, default=12, help="Ngưỡng Early Stopping")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--num_workers", "--num-workers", type=int, default=0)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
@@ -596,7 +600,32 @@ def main():
     else:
         edl_loss_fn = nn.CrossEntropyLoss(weight=class_weights_tensor, label_smoothing=0.05)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # Tách nhóm Learning Rate (Differential Learning Rates):
+    # - Shared Encoder: lr gốc (1e-4) để bảo toàn đặc trưng ImageNet & chống giằng co
+    # - Seg Decoder: lr * 3.0 để hội tụ nhanh viền tổn thương
+    # - Cls Head + Attention: lr * 5.0 để học hết tốc lực dù w_cls nhỏ (0.15)
+    enc_params, dec_params, cls_params = [], [], []
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+        if name.startswith("encoder."):
+            enc_params.append(param)
+        elif name.startswith("cls_head.") or name.startswith("mask_guided_attn."):
+            cls_params.append(param)
+        else:
+            dec_params.append(param)
+
+    param_groups = [
+        {"params": enc_params, "lr": args.lr},
+        {"params": dec_params, "lr": args.lr * args.dec_lr_mult},
+        {"params": cls_params, "lr": args.lr * args.cls_lr_mult},
+    ]
+    print(
+        f"  + Differential LR: Encoder={args.lr:.1e} | "
+        f"Decoder={args.lr * args.dec_lr_mult:.1e} | "
+        f"ClsHead={args.lr * args.cls_lr_mult:.1e}"
+    )
+    optimizer = torch.optim.AdamW(param_groups, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
 
     # 4. Nếu chế độ eval_only hoặc nạp checkpoint
