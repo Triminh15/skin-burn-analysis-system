@@ -33,6 +33,14 @@ SEGMENTATION_MODELS = {
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "unet_resnet34_focal_tversky_best.pth"),
         "metrics_file": os.path.join(FIGURES_DIR, "unet_resnet34_focal_tversky_test_results.json"),
     },
+    "ea_unet_v2_bnd_supervision": {
+        "name": "EA-UNet v2 (Boundary Supervision · Combo Loss)",
+        "arch": "ea_unet",
+        "backbone": "resnet34",
+        "attention": "none",
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "run_ea_unet_v2_bnd_supervision_best.pth"),
+        "metrics_file": os.path.join(FIGURES_DIR, "run_ea_unet_v2_bnd_supervision_test_results.json"),
+    },
     "ea_unet_resnet34_combo": {
         "name": "EA-UNet (ResNet-34 · Combo Loss)",
         "arch": "ea_unet",

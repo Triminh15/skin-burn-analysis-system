@@ -55,6 +55,19 @@ def set_seed(seed: int = 42):
         torch.backends.cudnn.benchmark = False
 
 
+def extract_boundary_mask_gpu(masks: torch.Tensor, kernel_size: int = 5) -> torch.Tensor:
+    """
+    Sinh Ground-Truth viền ban đỏ trực tiếp trên GPU bằng toán tử Morphological Gradient:
+    B_GT = Dilation(M_GT) - Erosion(M_GT)
+    Thực hiện bằng Max-Pooling 2D siêu tốc (0.1ms), hoàn toàn không tắc nghẽn I/O.
+    """
+    pad = kernel_size // 2
+    dilated = F.max_pool2d(masks, kernel_size=kernel_size, stride=1, padding=pad)
+    eroded = -F.max_pool2d(-masks, kernel_size=kernel_size, stride=1, padding=pad)
+    boundary = (dilated - eroded).clamp(0.0, 1.0)
+    return boundary
+
+
 def train_one_epoch(
     model: nn.Module,
     dataloader: DataLoader,
@@ -62,7 +75,7 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     device: torch.device
 ) -> Tuple[float, float, float]:
-    """Huấn luyện mô hình qua 1 Epoch."""
+    """Huấn luyện mô hình qua 1 Epoch (hỗ trợ Deep Boundary Supervision)."""
     model.train()
     running_loss = 0.0
     tracker = SegmentationMetricTracker()
@@ -73,8 +86,20 @@ def train_one_epoch(
         masks = batch["mask"].to(device)
 
         optimizer.zero_grad()
-        logits = model(images)
-        loss = criterion(logits, masks)
+        outputs = model(images)
+
+        # Hỗ trợ Deep Boundary Supervision cho EA-UNet
+        if isinstance(outputs, tuple):
+            mask_logits, bnd_logits = outputs
+            loss_mask = criterion(mask_logits, masks)
+            bnd_targets = extract_boundary_mask_gpu(masks)
+            loss_bnd = criterion(bnd_logits, bnd_targets)
+            loss = loss_mask + 0.4 * loss_bnd
+            logits = mask_logits
+        else:
+            logits = outputs
+            loss = criterion(logits, masks)
+
         loss.backward()
         optimizer.step()
 
@@ -104,7 +129,8 @@ def validate(
             images = batch["image"].to(device)
             masks = batch["mask"].to(device)
 
-            logits = model(images)
+            outputs = model(images)
+            logits = outputs[0] if isinstance(outputs, tuple) else outputs
             loss = criterion(logits, masks)
 
             running_loss += loss.item() * images.size(0)

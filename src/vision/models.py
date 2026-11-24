@@ -11,7 +11,7 @@ Mục đích: Định nghĩa và khởi tạo các mô hình Deep Learning chu�
 """
 
 import sys
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,10 +84,11 @@ class ErythemaBoundaryBranch(nn.Module):
 
 class GatedFusionModule(nn.Module):
     """
-    Cổng Hợp Nhất Thích Nghi (Adaptive Gated Fusion):
-    alpha = Sigmoid(Conv([F_core, F_boundary]))
-    F_fused = alpha * F_core + (1 - alpha) * F_boundary
-    Tự động ưu tiên nhánh Lõi ở giữa vết thương và chuyển tiếp mượt mà sang nhánh Viền ở rìa ban đỏ.
+    Cổng Hợp Nhất Thích Nghi Dạng Phần Dư (Residual Gated Fusion):
+    gate = Sigmoid(Conv([F_core, F_boundary]))
+    F_fused = F_core + gate * F_boundary
+    Bảo toàn 100% đặc trưng lòng tổn thương F_core và bổ sung dải viền ban đỏ F_boundary
+    ở những vùng ranh giới ngoại vi mà không làm suy giảm cường độ tín hiệu gốc.
     """
     def __init__(self, channels: int = 32):
         super().__init__()
@@ -95,27 +96,30 @@ class GatedFusionModule(nn.Module):
             nn.Conv2d(channels * 2, channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(channels, 1, kernel_size=1),
+            nn.Conv2d(channels, channels, kernel_size=1),
             nn.Sigmoid(),
         )
 
     def forward(self, f_core: torch.Tensor, f_bnd: torch.Tensor) -> torch.Tensor:
-        alpha = self.gate_conv(torch.cat([f_core, f_bnd], dim=1))
-        return alpha * f_core + (1.0 - alpha) * f_bnd
+        gate = self.gate_conv(torch.cat([f_core, f_bnd], dim=1))
+        return f_core + gate * f_bnd
 
 
 class EAUNet(nn.Module):
     """
-    Erythema-Aware Dual-Branch U-Net (EA-UNet) — Đỉnh cao SOTA Phân đoạn Tổn thương Bỏng.
+    Erythema-Aware Dual-Branch U-Net (EA-UNet v2) với Cơ chế Giám sát Đa tầng (Deep Boundary Supervision).
     
     Cấu trúc:
     1. Pretrained Encoder (ResNet-34 / ConvNeXt): Trích xuất đặc trưng đa tầng (c0..c4).
     2. Expansive Decoder Path: Giải nén không gian kết hợp Skip Connections.
     3. Dual-Branch Refinement:
-       - Core Branch: Bắt trọn lòng tổn thương hoại tử sâu.
-       - Boundary Branch: Tách riêng dải viền ban đỏ mờ ngoại vi (Erythema).
-       - Gated Fusion: Hợp nhất thích nghi đặc trưng lõi và viền.
-    4. Output: Tensor logits (B, classes, H, W) hoàn toàn tương thích với các loss hàm phân đoạn.
+       - Core Branch: Bắt trọn lòng tổn thương hoại tử sâu qua Dilated Convolutions (d=2).
+       - Boundary Branch: Tách riêng dải viền ban đỏ ngoại vi (Erythema) từ đặc trưng nông c0.
+       - Deep Boundary Supervision Head: Dự đoán trực tiếp Ground-Truth viền để chống trôi dạt gradient.
+       - Residual Gated Fusion: Hợp nhất phần dư không làm loãng đặc trưng chính.
+    4. Output:
+       - Train mode: Trả về (mask_logits, boundary_logits) để huấn luyện đa mục tiêu.
+       - Eval / Test mode: Trả về mask_logits chuẩn (B, classes, H, W).
     """
     def __init__(
         self,
@@ -148,7 +152,9 @@ class EAUNet(nn.Module):
         # 3. Dual-Branch Refinement at H/2 Resolution
         self.core_branch = CoreLesionBranch(in_ch=32, out_ch=32)
         self.boundary_branch = ErythemaBoundaryBranch(in_ch=c0_ch, out_ch=32)
+        self.boundary_head = nn.Conv2d(32, classes, kernel_size=1)
         self.gated_fusion = GatedFusionModule(channels=32)
+        self.up_bnd = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
         # 4. Final Head at Original Resolution (H x W)
         self.up0 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
@@ -160,7 +166,11 @@ class EAUNet(nn.Module):
             up_feat = F.interpolate(up_feat, size=skip_feat.shape[2:], mode='bilinear', align_corners=False)
         return torch.cat([up_feat, skip_feat], dim=1)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        return_boundary: Optional[bool] = None
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         # Encoder
         c0, c1, c2, c3, c4 = self.encoder(x)
 
@@ -172,12 +182,11 @@ class EAUNet(nn.Module):
 
         # Dual-Branch Processing
         f_core = self.core_branch(d1)
-        # Nhánh viền nhận đặc trưng nông c0
         f_bnd = self.boundary_branch(c0)
         if f_bnd.shape[2:] != f_core.shape[2:]:
             f_bnd = F.interpolate(f_bnd, size=f_core.shape[2:], mode='bilinear', align_corners=False)
 
-        # Gated Fusion
+        # Residual Gated Fusion
         f_fused = self.gated_fusion(f_core, f_bnd)
 
         # Upsample về độ phân giải gốc H x W
@@ -186,6 +195,15 @@ class EAUNet(nn.Module):
             u0 = F.interpolate(u0, size=x.shape[2:], mode='bilinear', align_corners=False)
         out = self.dec0(u0)
         mask_logits = self.final_conv(out)
+
+        # Xác định chế độ xuất viền (trong train mode hoặc khi được yêu cầu)
+        need_bnd = return_boundary if return_boundary is not None else self.training
+        if need_bnd:
+            bnd_logits = self.boundary_head(self.up_bnd(f_bnd))
+            if bnd_logits.shape[2:] != x.shape[2:]:
+                bnd_logits = F.interpolate(bnd_logits, size=x.shape[2:], mode='bilinear', align_corners=False)
+            return mask_logits, bnd_logits
+
         return mask_logits
 
 

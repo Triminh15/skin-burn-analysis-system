@@ -68,8 +68,12 @@ class TestEAUNetArchitecture:
 
         criterion = get_segmentation_loss("combo")
         model.zero_grad()
-        logits = model(x)
-        loss = criterion(logits, masks)
+        outputs = model(x)
+        if isinstance(outputs, tuple):
+            mask_logits, bnd_logits = outputs
+            loss = criterion(mask_logits, masks) + 0.4 * criterion(bnd_logits, masks)
+        else:
+            loss = criterion(outputs, masks)
         loss.backward()
 
         # 1. Encoder gradient
@@ -84,10 +88,15 @@ class TestEAUNetArchitecture:
         bnd_grad = model.boundary_branch.edge_block[0].weight.grad
         assert bnd_grad is not None and bnd_grad.norm().item() > 0
 
-        # 4. Gated fusion gradient
+        # 4. Boundary head gradient (Deep Boundary Supervision)
+        bnd_head_grad = model.boundary_head.weight.grad
+        assert bnd_head_grad is not None and bnd_head_grad.norm().item() > 0
+
+        # 5. Gated fusion gradient
         gate_grad = model.gated_fusion.gate_conv[0].weight.grad
         assert gate_grad is not None and gate_grad.norm().item() > 0
 
-        # 5. Final output conv gradient
+        # 6. Final output conv gradient
         final_grad = model.final_conv.weight.grad
         assert final_grad is not None and final_grad.norm().item() > 0
+
