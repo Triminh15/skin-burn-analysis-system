@@ -41,6 +41,14 @@ SEGMENTATION_MODELS = {
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "run_ea_unet_resnet34_combo_best.pth"),
         "metrics_file": os.path.join(FIGURES_DIR, "run_ea_unet_resnet34_combo_test_results.json"),
     },
+    "ea_unet_resnet34_focal_tversky": {
+        "name": "EA-UNet (ResNet-34 · Focal Tversky)",
+        "arch": "ea_unet",
+        "backbone": "resnet34",
+        "attention": "none",
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "run_ea_unet_resnet34_focal_tversky_best.pth"),
+        "metrics_file": os.path.join(FIGURES_DIR, "run_ea_unet_resnet34_focal_tversky_test_results.json"),
+    },
     "unet_resnet34_combo": {
         "name": "U-Net (ResNet-34 · Combo Loss)",
         "arch": "unet",
