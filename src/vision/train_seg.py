@@ -31,6 +31,7 @@ from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 # Đảm bảo thư mục gốc dự án luôn nằm trong sys.path
