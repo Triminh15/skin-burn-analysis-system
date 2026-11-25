@@ -12,6 +12,7 @@ Hỗ trợ:
 
 import os
 import sys
+import random
 import argparse
 import json
 import time
@@ -47,7 +48,9 @@ from src.vision.models import build_segmentation_model, count_parameters
 
 
 def set_seed(seed: int = 42):
-    """Cố định seed ngẫu nhiên đảm bảo kết quả khoa học tái lập 100%."""
+    """Cố định seed ngẫu nhiên toàn diện (Python random, NumPy, PyTorch, CuDNN) đảm bảo tái lập 100%."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -276,10 +279,13 @@ def main():
         transform=get_val_transforms(img_size=args.img_size)
     )
 
+    train_gen = torch.Generator()
+    train_gen.manual_seed(args.seed)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
+        generator=train_gen,
         num_workers=0,  # 0 là an toàn tuyệt đối trên Windows
         pin_memory=torch.cuda.is_available()
     )

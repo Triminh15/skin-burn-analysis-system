@@ -195,7 +195,9 @@ def run_segmentation_5fold(args, folds: List[Dict[str, str]]) -> Dict[str, Any]:
 
         train_ds = SkinBurnDataset(csv_path=fm["seg_train"], transform=get_train_transforms(img_size=args.seg_img_size))
         val_ds = SkinBurnDataset(csv_path=fm["seg_val"], transform=get_val_transforms(img_size=args.seg_img_size))
-        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
+        fold_gen = torch.Generator()
+        fold_gen.manual_seed(args.seed + k)
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, generator=fold_gen, num_workers=0)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
         model = build_segmentation_model(
@@ -400,7 +402,9 @@ def run_classification_5fold(args, folds: List[Dict[str, str]]) -> Dict[str, Any
 
         train_ds = BurnROIDataset(csv_path=fm["cls_train"], transform=get_cls_train_transforms(img_size=224))
         val_ds = BurnROIDataset(csv_path=fm["cls_val"], transform=get_cls_val_transforms(img_size=224))
-        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
+        fold_gen = torch.Generator()
+        fold_gen.manual_seed(args.seed + k)
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, generator=fold_gen, num_workers=0)
         val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
         class_counts = [int((train_ds.df["severity_degree"] == c).sum()) for c in range(3)]

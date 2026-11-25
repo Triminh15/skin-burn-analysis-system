@@ -13,6 +13,7 @@ Hỗ trợ:
 
 import os
 import sys
+import random
 import argparse
 import json
 import time
@@ -136,11 +137,14 @@ class BurnROIDataset(Dataset):
 # ==============================================================================
 
 def set_seed(seed: int = 42):
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def train_one_epoch(
@@ -369,7 +373,9 @@ def main():
     val_dataset = BurnROIDataset("data/splits/val_roi.csv", transform=get_cls_val_transforms())
     test_dataset = BurnROIDataset("data/splits/test_roi.csv", transform=get_cls_val_transforms())
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    train_gen = torch.Generator()
+    train_gen.manual_seed(args.seed)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=train_gen, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
