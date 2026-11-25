@@ -533,17 +533,25 @@ def run_classification_5fold(args, folds: List[Dict[str, str]]) -> Dict[str, Any
     ens_ece = round(calculate_ece(ens_probs, test_y_ref), 4)
 
     # --- HẬU HIỆU CHUẨN BAYES CHI PHÍ ĐỘ 3 TRÊN TẬP OUT-OF-FOLD VALIDATION (1.038 ẢNH, KHÔNG ĐỤNG TEST) ---
+    from sklearn.metrics import accuracy_score
     oof_p_cat = torch.cat(oof_probs_all, dim=0)
     oof_y_cat = torch.cat(oof_y_all, dim=0).numpy()
+    base_oof_preds = np.argmax(oof_p_cat.numpy(), axis=1)
+    base_oof_acc = float(accuracy_score(oof_y_cat, base_oof_preds))
+
     best_c3 = 1.0
     best_oof_obj = -1.0
-    for tau in np.linspace(1.0, 1.8, 17):
+    # Quét rộng c3 thuộc [1.0, 4.5] phù hợp với phân phối sắc nét của exp(logits),
+    # cân bằng 50% OOF Macro F1 + 50% OOF Recall Độ 3 với ràng buộc an toàn không tụt quá 2.5% OOF Accuracy
+    for tau in np.linspace(1.0, 4.5, 71):
         adj_oof = _apply_deg3_cost_weight(oof_p_cat, float(tau)).numpy()
         preds_oof = np.argmax(adj_oof, axis=1)
+        oof_acc = float(accuracy_score(oof_y_cat, preds_oof))
+        if oof_acc < base_oof_acc - 0.025:
+            continue
         oof_f1 = float(f1_score(oof_y_cat, preds_oof, average="macro", zero_division=0))
         oof_rec3 = float(recall_score(oof_y_cat, preds_oof, labels=[0, 1, 2], average=None, zero_division=0)[2])
-        # Tối ưu cân bằng F1 toàn cục và Recall Độ 3 trên 1.038 ảnh Out-Of-Fold Validation
-        obj = 0.75 * oof_f1 + 0.25 * oof_rec3
+        obj = 0.50 * oof_f1 + 0.50 * oof_rec3
         if obj > best_oof_obj:
             best_oof_obj = obj
             best_c3 = float(tau)
@@ -678,3 +686,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

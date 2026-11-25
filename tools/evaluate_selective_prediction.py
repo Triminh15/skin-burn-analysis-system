@@ -245,15 +245,20 @@ def evaluate_checkpoint(
     if calibrate_deg3_on_val and os.path.exists(val_csv_path):
         val_ds = BurnROIDataset(csv_path=val_csv_path, transform=get_cls_val_transforms(img_size=img_size))
         val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=0)
+        from sklearn.metrics import accuracy_score
         val_probs, _, val_y = _infer_probs_and_u(model, val_loader, device, edl_activation)
         val_y_np = val_y.numpy()
+        base_val_acc = float(accuracy_score(val_y_np, np.argmax(val_probs.numpy(), axis=1)))
         best_score = -1.0
-        for tau in np.linspace(1.0, 2.2, 25):
+        for tau in np.linspace(1.0, 4.5, 71):
             adj_p = _apply_deg3_cost_weight(val_probs, float(tau)).numpy()
             preds = np.argmax(adj_p, axis=1)
+            vacc = float(accuracy_score(val_y_np, preds))
+            if vacc < base_val_acc - 0.025:
+                continue
             vf1 = float(f1_score(val_y_np, preds, average="macro", zero_division=0))
             vrec3 = float(recall_score(val_y_np, preds, labels=[0, 1, 2], average=None, zero_division=0)[2])
-            score = 0.65 * vf1 + 0.35 * vrec3
+            score = 0.50 * vf1 + 0.50 * vrec3
             if score > best_score:
                 best_score = score
                 best_deg3_cost = float(tau)
