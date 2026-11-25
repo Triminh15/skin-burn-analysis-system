@@ -250,7 +250,7 @@ def evaluate_checkpoint(
         val_y_np = val_y.numpy()
         base_val_acc = float(accuracy_score(val_y_np, np.argmax(val_probs.numpy(), axis=1)))
         best_score = -1.0
-        for tau in np.linspace(1.0, 4.5, 71):
+        for tau in np.linspace(0.4, 4.5, 83):
             adj_p = _apply_deg3_cost_weight(val_probs, float(tau)).numpy()
             preds = np.argmax(adj_p, axis=1)
             vacc = float(accuracy_score(val_y_np, preds))

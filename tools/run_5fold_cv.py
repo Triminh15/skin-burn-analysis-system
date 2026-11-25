@@ -543,7 +543,7 @@ def run_classification_5fold(args, folds: List[Dict[str, str]]) -> Dict[str, Any
     best_oof_obj = -1.0
     # Quét rộng c3 thuộc [1.0, 4.5] phù hợp với phân phối sắc nét của exp(logits),
     # cân bằng 50% OOF Macro F1 + 50% OOF Recall Độ 3 với ràng buộc an toàn không tụt quá 2.5% OOF Accuracy
-    for tau in np.linspace(1.0, 4.5, 71):
+    for tau in np.linspace(0.4, 4.5, 83):
         adj_oof = _apply_deg3_cost_weight(oof_p_cat, float(tau)).numpy()
         preds_oof = np.argmax(adj_oof, axis=1)
         oof_acc = float(accuracy_score(oof_y_cat, preds_oof))
