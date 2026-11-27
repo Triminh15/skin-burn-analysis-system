@@ -57,3 +57,4 @@ def test_synchronized_5fold_zero_leakage_and_full_coverage(tmp_path):
 
     # Hợp của 5 tập Val phải phủ đúng toàn bộ 1.038 ảnh phát triển (856 + 182)
     assert len(seen_val_ids) == 1038
+

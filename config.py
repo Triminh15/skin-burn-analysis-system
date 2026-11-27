@@ -25,6 +25,19 @@ DB_PATH = os.path.join(PROJECT_ROOT, "burnscan.db")
 
 # Trained Segmentation Model Registry (outputs/checkpoints/)
 SEGMENTATION_MODELS = {
+    "kfold_unet_resnet34_combo": {
+        "name": "5-Fold U-Net Ensemble (ResNet-34 · Combo + Spatial Uncertainty)",
+        "arch": "unet",
+        "backbone": "resnet34",
+        "attention": "none",
+        "use_tta": True,
+        "checkpoints": [
+            os.path.join(CHECKPOINTS_DIR, "kfold_seg", f"kfold_unet_resnet34_combo_fold{k}_best.pth")
+            for k in range(1, 6)
+        ],
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "unet_resnet34_combo_best.pth"),
+        "metrics_file": os.path.join(FIGURES_DIR, "kfold_unet_resnet34_combo_5fold_summary.json"),
+    },
     "unet_resnet34_focal_tversky": {
         "name": "U-Net (ResNet-34 · Focal Tversky)",
         "arch": "unet",
@@ -93,15 +106,33 @@ SEGMENTATION_MODELS = {
 
 # Trained Classification Model Registry (outputs/checkpoints/)
 CLASSIFICATION_MODELS = {
+    "kfold_cls_resnet34_edl": {
+        "name": "5-Fold ResNet-34 Ensemble (Asymmetric R-EDL + Selective Triage)",
+        "model_name": "resnet34",
+        "loss_type": "edl",
+        "edl_activation": "exp",
+        "uncertainty_threshold": 0.1180,
+        "deg3_cost_c3": 1.95,
+        "checkpoints": [
+            os.path.join(CHECKPOINTS_DIR, "kfold_cls", f"kfold_cls_resnet34_edl_fold{k}_best.pth")
+            for k in range(1, 6)
+        ],
+        "checkpoint": os.path.join(CHECKPOINTS_DIR, "classifier", "run_m1_classifier_redl_exp_best.pth"),
+        "metrics_file": os.path.join(FIGURES_DIR, "kfold_cls_resnet34_edl_5fold_summary.json"),
+    },
     "cls_resnet34_weighted_ce": {
         "name": "ResNet-34 (Weighted CE)",
         "model_name": "resnet34",
+        "loss_type": "softmax",
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "cls_resnet34_weighted_ce_best.pth"),
         "metrics_file": os.path.join(FIGURES_DIR, "cls_resnet34_weighted_ce_test_results.json"),
     },
     "cls_resnet34_redl_exp": {
         "name": "ResNet-34 (Relaxed Log-Evidence EDL)",
         "model_name": "resnet34",
+        "loss_type": "edl",
+        "edl_activation": "exp",
+        "uncertainty_threshold": 0.1527,
         "checkpoint": os.path.join(CHECKPOINTS_DIR, "classifier", "run_m1_classifier_redl_exp_best.pth"),
         "metrics_file": os.path.join(CHECKPOINTS_DIR, "classifier", "figures", "run_m1_classifier_redl_exp_test_results.json"),
     },
@@ -119,6 +150,6 @@ CLASSIFICATION_MODELS = {
     },
 }
 
-DEFAULT_SEG_MODEL = "unet_resnet34_focal_tversky"
-DEFAULT_CLS_MODEL = "cls_resnet34_weighted_ce"
+DEFAULT_SEG_MODEL = "kfold_unet_resnet34_combo"
+DEFAULT_CLS_MODEL = "kfold_cls_resnet34_edl"
 

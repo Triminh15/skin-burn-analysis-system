@@ -142,7 +142,10 @@ async def list_models():
         seg_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.seg_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
@@ -152,7 +155,10 @@ async def list_models():
         cls_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.cls_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
@@ -235,7 +241,10 @@ async def list_models():
         seg_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.seg_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
@@ -245,7 +254,10 @@ async def list_models():
         cls_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.cls_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
