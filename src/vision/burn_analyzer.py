@@ -1,15 +1,15 @@
 """
 Module: src/vision/burn_analyzer.py
-Mục đích: Bộ phân tích vết bỏng toàn diện nhận thức Độ bất định Kép (Dual-Uncertainty Clinical Burn Analyzer):
-1. Phân đoạn vết bỏng bằng 5-Fold U-Net (ResNet-34) (+4x TTA) để sinh mặt nạ (Mask) & Bản đồ Độ bất định Biên từng pixel.
-2. Lọc nhiễu hình thái học (Morphological Cleaning).
-3. Tính toán diện tích vết thương kèm Khoảng tin cậy (Spatial Uncertainty Interval):
-   - Số lượng pixel tổn thương & % Frame Area [low, high].
-   - Quy đổi ra cm² thực tế (nếu có thước chuẩn).
-   - Ước tính khoảng % TBSA theo Luật số 9 Wallace & Cảnh báo ranh giới sốc bỏng 10% TBSA.
-4. Tính toán phác đồ bù dịch Parkland kèm khoảng an toàn thể tích 24h (ml).
-5. Cắt ảnh ROI và Phân loại mức độ bỏng (Độ 1, Độ 2, Độ 3) bằng 5-Fold Asymmetric R-EDL + Selective Clinical Triage.
-6. Trích xuất ảnh trực quan hóa (Overlay, Contour, Pixel Uncertainty Heatmap, Grad-CAM).
+Mục đích: Bộ phân tích vết bỏng toàn diện hợp nhất Chuẩn hóa Giải phẫu & Độ bất định Kép
+(Anatomical & Dual-Uncertainty Clinical Burn Analyzer):
+1. Phân đoạn vết bỏng bằng 5-Fold U-Net (ResNet-34) (+4x TTA) sinh Mask & Bản đồ Độ bất định Biên từng pixel.
+2. Phân đoạn tự động Vùng da bộ phận chụp được (YCrCb + HSV + Peri-lesional Ring) loại bỏ phông nền.
+3. Chuẩn hóa % TBSA theo Vùng giải phẫu (Wallace Rule of Nines, Palmar 1%, Lund-Browder Nhi khoa)
+   hoặc Thước chuẩn vật lý (Mosteller BSA), kết hợp Khoảng tin cậy diện tích [TBSA_low, TBSA_high].
+4. Tính toán phác đồ bù dịch Parkland an toàn (chống truyền bù dồn quá tải khi đến muộn >= 8h,
+   bổ sung lưu ý dịch duy trì có Glucose cho bệnh nhi < 15 tuổi, cảnh báo ranh giới sốc bỏng 10% TBSA).
+5. Cắt ảnh ROI và Phân loại mức độ bỏng bằng 5-Fold Asymmetric R-EDL + Selective Clinical Triage.
+6. Trích xuất ảnh trực quan hóa (Overlay, Contour Da + Bỏng + ROI, Pixel Uncertainty Heatmap, Grad-CAM).
 """
 
 import os
@@ -40,29 +40,22 @@ from src.vision.spatial_uncertainty import (
     compute_clinical_tbsa_and_parkland_interval,
     render_uncertainty_heatmap_rgb,
 )
-from src.vision.postprocessing import clean_binary_mask, calculate_burn_area_percentage, get_burn_bounding_box, crop_roi
+from src.vision.anatomical_tbsa import (
+    ANATOMICAL_REGIONS,
+    RULE_OF_NINES,
+    compute_anatomical_tbsa,
+)
+from src.vision.postprocessing import clean_binary_mask, get_burn_bounding_box, crop_roi
 from src.utils.gradcam import GradCAM, overlay_cam_on_image
 
-
-RULE_OF_NINES = {
-    "head_neck": 9.0,
-    "left_arm": 9.0,
-    "right_arm": 9.0,
-    "chest_abdomen": 18.0,
-    "back_buttocks": 18.0,
-    "left_leg": 18.0,
-    "right_leg": 18.0,
-    "perineum": 1.0,
-    "unknown": 10.0,
-}
 
 CLASS_NAMES = ["Độ 1 (Superficial)", "Độ 2 (Partial Thickness)", "Độ 3 (Full Thickness)"]
 
 
 class BurnAnalyzer:
     """
-    Pipeline tích hợp hoàn chỉnh phân tích tổn thương bỏng nhận thức độ bất định kép (Dual-Uncertainty).
-    Tự động hỗ trợ cả 5-Fold Ensemble lẫn 1-Model đơn lẻ (tương thích ngược 100%).
+    Pipeline tích hợp hoàn chỉnh phân tích tổn thương bỏng nhận thức độ bất định kép (Dual-Uncertainty)
+    kết hợp chuẩn hóa giải phẫu Rule of Nines / Palmar 1% / Lund-Browder.
     """
 
     def __init__(
@@ -165,7 +158,6 @@ class BurnAnalyzer:
     def predict_mask(self, image_rgb: np.ndarray, threshold: float = 0.5) -> np.ndarray:
         """
         Dự đoán mặt nạ phân đoạn nhị phân từ ảnh RGB gốc (kèm lưu bộ nhớ đệm bản đồ độ bất định không gian).
-        Trả về mask nhị phân kích thước gốc của ảnh (0: nền, 255: vết bỏng).
         """
         if not self.seg_models and self.seg_model is None:
             self.load_models()
@@ -203,51 +195,98 @@ class BurnAnalyzer:
         body_part: str = "chest_abdomen",
         weight_kg: Optional[float] = None,
         predicted_class_id: int = 1,
+        image_rgb: Optional[np.ndarray] = None,
+        region_coverage: float = 1.0,
+        calibration_mode: str = "auto",
+        patient_age: Optional[int] = None,
+        burn_time_hours: Optional[float] = None,
+        height_cm: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Tính toán thông số diện tích y khoa, khoảng độ bất định diện tích (TBSA Interval) và phác đồ bù dịch Parkland.
+        Tính toán thông số diện tích y khoa chuẩn hóa giải phẫu (Rule of Nines / Palmar 1% / Lund-Browder)
+        kết hợp Khoảng tin cậy độ bất định không gian (TBSA Interval) và phác đồ bù dịch Parkland an toàn.
         """
         h, w = mask.shape[:2]
-        total_pixels = h * w
-        burn_pixels = int(np.count_nonzero(mask > 127))
-        pct_frame = calculate_burn_area_percentage(mask)
+        tbsa_info = compute_anatomical_tbsa(
+            burn_mask=mask,
+            image_rgb=image_rgb,
+            body_part=body_part,
+            region_coverage=region_coverage,
+            calibration_mode=calibration_mode,
+            pixels_per_cm=pixels_per_cm,
+            weight_kg=weight_kg,
+            patient_age=patient_age,
+            height_cm=height_cm,
+        )
 
-        area_cm2 = None
-        if pixels_per_cm and pixels_per_cm > 0:
-            area_cm2 = round(burn_pixels / (pixels_per_cm ** 2), 2)
+        total_pixels = tbsa_info["total_pixels"]
+        burn_pixels = tbsa_info["burn_pixels"]
+        pct_frame = tbsa_info["pct_frame_area"]
+        area_cm2 = tbsa_info["area_cm2"]
+        estimated_tbsa = tbsa_info["estimated_tbsa_pct"]
 
-        region_weight = float(RULE_OF_NINES.get(body_part, 9.0))
-        if area_cm2 and area_cm2 > 0:
-            patient_weight = float(weight_kg if (weight_kg and weight_kg > 0) else 68.0)
-            bsa_cm2 = float(np.sqrt((170.0 * patient_weight) / 3600.0) * 10000.0)
-            tbsa_from_area = float((area_cm2 / bsa_cm2) * 100.0)
-            estimated_tbsa = float(round(min(region_weight, max(0.001, tbsa_from_area)), 3))
-        else:
-            estimated_tbsa = float(round(min(region_weight, (pct_frame / 100.0) * region_weight), 2))
+        is_pediatric = bool(patient_age is not None and 0 <= int(patient_age) < 15)
+        shock_threshold = 10.0
+        urgent_threshold = 10.0 if is_pediatric else 15.0
 
-        # Lượng hóa khoảng bất định diện tích & khoảng Parkland từ bản đồ xác suất (Hướng 1)
-        prob_source = self._last_prob_stack if self._last_prob_stack is not None else (mask > 127).astype(np.float32)[np.newaxis, ...]
+        # Lượng hóa khoảng bất định diện tích chuẩn hóa trên vùng da giải phẫu (Hợp nhất Hướng 1 + Hướng 7)
+        prob_source = (
+            self._last_prob_stack
+            if self._last_prob_stack is not None
+            else (mask > 127).astype(np.float32)[np.newaxis, ...]
+        )
         spatial_interval = compute_clinical_tbsa_and_parkland_interval(
             prob_source,
-            region_weight=region_weight,
+            region_weight=tbsa_info["region_weight_pct"],
             weight_kg=weight_kg,
             predicted_class_id=predicted_class_id,
             pixels_per_cm=pixels_per_cm,
             orig_hw=(h, w),
+            skin_pixels=tbsa_info["skin_pixels"],
+            region_coverage=tbsa_info["region_coverage"],
+            calibration_mode=tbsa_info["calibration_mode"],
+            bsa_cm2_override=tbsa_info["bsa_cm2"],
+            shock_threshold=shock_threshold,
         )
         boundary_stats = summarize_boundary_uncertainty(prob_source)
 
         parkland_plan = None
+        elapsed_h = float(burn_time_hours) if (burn_time_hours is not None and burn_time_hours >= 0) else 0.0
+        late_presentation_over_8h = bool(elapsed_h >= 8.0)
+        rem_first_8h = float(max(0.5, 8.0 - elapsed_h)) if not late_presentation_over_8h else 0.0
+
         if weight_kg and weight_kg > 0 and estimated_tbsa > 0:
             total_fluid_ml = float(round(4.0 * float(weight_kg) * estimated_tbsa, 1))
             fluid_first_8h = float(round(total_fluid_ml * 0.5, 1))
-            rate_first_8h = float(round(fluid_first_8h / 8.0, 1))
+            rate_first_8h_std = float(round(fluid_first_8h / 8.0, 1))
             rate_next_16h = float(round((total_fluid_ml * 0.5) / 16.0, 1))
+            # Nếu bệnh nhân đến muộn >= 8h sau bỏng: KHÔNG tự động dồn dịch 8h đầu vào 30 phút (nguy cơ phù phổi cấp!)
+            rate_first_8h = float(round(fluid_first_8h / rem_first_8h, 1)) if not late_presentation_over_8h else 0.0
 
             is_degree_1 = bool(predicted_class_id == 0)
-            is_indicated = bool((not is_degree_1) and (estimated_tbsa >= 10.0))
-            is_urgent = bool((not is_degree_1) and (estimated_tbsa >= 15.0))
+            is_indicated = bool((not is_degree_1) and (estimated_tbsa >= shock_threshold))
+            is_urgent = bool((not is_degree_1) and (estimated_tbsa >= urgent_threshold))
             borderline_warn = bool(spatial_interval["borderline_10pct_warning"])
+
+            norm_note = (
+                f"Đã chuẩn hóa từ {pct_frame}% khung ảnh → {tbsa_info['pct_burn_of_skin']}% diện tích da "
+                f"vùng '{tbsa_info['body_part_name']}' ({tbsa_info['region_weight_pct']}%) = {estimated_tbsa}% TBSA."
+            )
+
+            pediatric_note = ""
+            if is_pediatric and is_indicated:
+                pediatric_note = (
+                    " [LƯU Ý NHI KHOA < 15 TUỔI]: Trẻ em có dự trữ glycogen thấp, ngoài lượng Ringer Lactate hồi sức bỏng "
+                    "cần phối hợp thêm dịch duy trì đường tĩnh mạch có Glucose (theo công thức Holliday-Segar) dưới giám sát bác sĩ."
+                )
+
+            late_note = ""
+            if late_presentation_over_8h and is_indicated:
+                late_note = (
+                    f" [CẢNH BÁO ĐẾN MUỘN SAU {elapsed_h:.1f} GIỜ]: Đã qua mốc 8 giờ đầu kể từ thời điểm bỏng — "
+                    "TUYỆT ĐỐI KHÔNG tự động truyền bù dồn nửa lượng dịch đầu ở tốc độ cao để tránh phù phổi cấp. "
+                    "Bác sĩ hồi sức cần hiệu chỉnh tốc độ truyền theo huyết động và lượng nước tiểu mục tiêu (0.5–1.0 ml/kg/giờ)."
+                )
 
             if is_degree_1:
                 guidance = (
@@ -256,14 +295,15 @@ class BurnAnalyzer:
                 )
             elif not is_indicated:
                 guidance = (
-                    f"Diện tích tổn thương nhỏ ({estimated_tbsa}% TBSA), không có nguy cơ sốc giảm thể tích. "
+                    f"Diện tích tổn thương sau chuẩn hóa giải phẫu là {estimated_tbsa}% TBSA "
+                    f"(< {shock_threshold:.0f}% TBSA), không có nguy cơ sốc giảm thể tích. "
                     "TUYỆT ĐỐI KHÔNG truyền dịch tĩnh mạch để tránh quá tải tuần hoàn. Bù nước đường uống (Oresol) và xử trí tại chỗ."
                 )
                 if borderline_warn:
                     tbsa_lo, tbsa_hi = spatial_interval["tbsa_interval_pct"]
                     guidance += (
                         f" [CẢNH BÁO RANH GIỚI BẤT ĐỊNH]: Khoảng diện tích tin cậy [{tbsa_lo}% – {tbsa_hi}% TBSA] "
-                        "chạm ngưỡng 10% TBSA, đề nghị bác sĩ đo kiểm tra lại diện tích trực tiếp!"
+                        "cắt ngang ngưỡng 10% TBSA, đề nghị bác sĩ đo kiểm tra lại diện tích trực tiếp!"
                     )
             else:
                 pk_int = spatial_interval.get("parkland_interval")
@@ -272,8 +312,9 @@ class BurnAnalyzer:
                     if pk_int else ""
                 )
                 guidance = (
-                    f"Chỉ định cấp cứu: Diện tích tổn thương rộng ({estimated_tbsa}% TBSA), nguy cơ sốc bỏng cao. "
-                    f"Bắt buộc truyền Ringer Lactate hồi sức theo phác đồ Parkland{range_note}"
+                    f"Chỉ định cấp cứu: Diện tích tổn thương rộng ({estimated_tbsa}% TBSA sau chuẩn hóa giải phẫu), "
+                    f"nguy cơ sốc bỏng cao. Bắt buộc truyền Ringer Lactate hồi sức theo phác đồ Parkland{range_note}"
+                    f"{late_note}{pediatric_note}"
                 )
 
             parkland_plan = {
@@ -281,12 +322,17 @@ class BurnAnalyzer:
                 "total_fluid_24h_ml": float(total_fluid_ml) if is_indicated else 0.0,
                 "calculated_raw_ml": float(total_fluid_ml),
                 "first_8h_ml": float(fluid_first_8h) if is_indicated else 0.0,
+                "remaining_first_8h_hours": float(round(rem_first_8h, 1)),
+                "late_presentation_over_8h": late_presentation_over_8h,
+                "is_pediatric": is_pediatric,
                 "rate_first_8h_ml_h": float(rate_first_8h) if is_indicated else 0.0,
+                "rate_first_8h_standard_ml_h": float(rate_first_8h_std) if is_indicated else 0.0,
                 "rate_next_16h_ml_h": float(rate_next_16h) if is_indicated else 0.0,
                 "fluid_type": "Dung dịch Ringer Lactate" if is_indicated else "Bù dịch đường uống (Oresol / Nước ấm)",
                 "urgent_triage": bool(is_urgent),
                 "borderline_10pct_warning": borderline_warn,
                 "uncertainty_interval_ml": spatial_interval.get("parkland_interval"),
+                "anatomical_normalization_note": norm_note,
                 "clinical_guidance": guidance,
             }
 
@@ -294,16 +340,35 @@ class BurnAnalyzer:
             "image_dimensions": f"{w}x{h}",
             "total_pixels": int(total_pixels),
             "burn_pixels": int(burn_pixels),
+            "skin_pixels": int(tbsa_info["skin_pixels"]),
             "pct_frame_area": float(pct_frame),
             "pct_frame_interval": spatial_interval["pct_frame_interval"],
+            "pct_skin_in_frame": float(tbsa_info["pct_skin_in_frame"]),
+            "pct_burn_of_skin": float(tbsa_info["pct_burn_of_skin"]),
             "area_cm2": float(area_cm2) if area_cm2 is not None else None,
+            "estimated_area_cm2": float(tbsa_info["estimated_area_cm2"]) if tbsa_info["estimated_area_cm2"] is not None else None,
+            "area_is_estimated": bool(tbsa_info["area_is_estimated"]),
+            "bsa_cm2": float(tbsa_info["bsa_cm2"]),
             "body_part": body_part,
+            "body_part_name": tbsa_info["body_part_name"],
+            "region_weight_pct": float(tbsa_info["region_weight_pct"]),
+            "region_coverage": float(tbsa_info["region_coverage"]),
+            "effective_visible_region_pct": float(tbsa_info["effective_visible_region_pct"]),
+            "calibration_mode": tbsa_info["calibration_mode"],
+            "atlas_method": tbsa_info["atlas_method"],
+            "tbsa_method": tbsa_info["tbsa_method"],
+            "formula_summary": tbsa_info["formula_summary"],
+            "anatomical_tbsa_pct": float(tbsa_info["anatomical_tbsa_pct"]),
             "estimated_tbsa_pct": float(estimated_tbsa),
             "tbsa_interval_pct": spatial_interval["tbsa_interval_pct"],
             "tbsa_half_width_pct": spatial_interval["tbsa_half_width_pct"],
             "borderline_10pct_warning": spatial_interval["borderline_10pct_warning"],
             "boundary_entropy": round(boundary_stats["boundary_entropy"], 4),
+            "is_closeup_detected": bool(tbsa_info["is_closeup_detected"]),
+            "framing_warning": tbsa_info["framing_warning"],
+            "burn_time_hours": float(elapsed_h) if burn_time_hours is not None else None,
             "parkland_plan": parkland_plan,
+            "_skin_mask": tbsa_info["skin_mask"],
         }
 
     def classify_severity(self, image_rgb: np.ndarray, mask: np.ndarray) -> Dict[str, Any]:
@@ -343,7 +408,6 @@ class BurnAnalyzer:
                 probs = (prob_sum / float(len(active_cls_models))).squeeze().cpu().numpy()
                 epistemic_u = float(1.0 - np.max(probs))
 
-        # Áp dụng hậu hiệu chuẩn chi phí Bayes Độ 3 nếu được cấu hình
         decision_probs = probs.copy()
         if abs(deg3_c3 - 1.0) > 1e-5:
             decision_probs[2] *= deg3_c3
@@ -414,12 +478,28 @@ class BurnAnalyzer:
         image_rgb: np.ndarray,
         mask: np.ndarray,
         box: Optional[List[int]] = None,
+        skin_mask: Optional[np.ndarray] = None,
     ) -> Dict[str, np.ndarray]:
+        """
+        Tạo các hình ảnh minh họa y khoa:
+        1. Mask Overlay (đè màu đỏ bán trong suốt lên vết bỏng).
+        2. Contour Outline:
+           - Viền xanh lam (Cyan): Ranh giới vùng da bộ phận chụp được.
+           - Viền vàng (Gold): Ranh giới vết bỏng U-Net.
+           - Khung chữ nhật xanh lá: Vùng cắt ROI.
+        3. Uncertainty Heatmap: Bản đồ nhiệt độ bất định từng pixel dọc biên vết bỏng.
+        """
         overlay = image_rgb.copy()
         burn_indices = mask > 127
         overlay[burn_indices] = (0.6 * overlay[burn_indices] + 0.4 * np.array([255, 0, 0])).astype(np.uint8)
 
         contours_img = image_rgb.copy()
+        if skin_mask is not None:
+            skin_ratio = np.count_nonzero(skin_mask > 127) / max(1, skin_mask.size)
+            if 0.01 < skin_ratio < 0.97:
+                skin_contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(contours_img, skin_contours, -1, (0, 212, 255), 2)
+
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         cv2.drawContours(contours_img, contours, -1, (255, 215, 0), 2)
 
@@ -443,7 +523,15 @@ class BurnAnalyzer:
         pixels_per_cm: Optional[float] = None,
         body_part: str = "chest_abdomen",
         weight_kg: Optional[float] = None,
+        region_coverage: float = 1.0,
+        calibration_mode: str = "auto",
+        patient_age: Optional[int] = None,
+        burn_time_hours: Optional[float] = None,
+        height_cm: Optional[float] = None,
     ) -> Dict[str, Any]:
+        """
+        Hàm chính chạy toàn bộ Pipeline End-to-End từ ảnh đầu vào.
+        """
         if isinstance(image_input, str):
             if not os.path.exists(image_input):
                 raise FileNotFoundError(f"Không tìm thấy file ảnh: {image_input}")
@@ -460,12 +548,25 @@ class BurnAnalyzer:
             body_part=body_part,
             weight_kg=weight_kg,
             predicted_class_id=classification.get("predicted_class_id", 1),
+            image_rgb=image_rgb,
+            region_coverage=region_coverage,
+            calibration_mode=calibration_mode,
+            patient_age=patient_age,
+            burn_time_hours=burn_time_hours,
+            height_cm=height_cm,
         )
-        visuals = self.generate_visualizations(image_rgb, mask, classification["bounding_box"])
+        skin_mask = metrics.pop("_skin_mask", None)
+        visuals = self.generate_visualizations(
+            image_rgb,
+            mask,
+            classification["bounding_box"],
+            skin_mask=skin_mask,
+        )
 
         return {
             "metrics": metrics,
             "classification": classification,
             "visualizations": visuals,
             "mask": mask,
+            "skin_mask": skin_mask,
         }

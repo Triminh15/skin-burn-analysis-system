@@ -161,11 +161,13 @@ def prepare_isic_nonburn_ood(base_dir: str, max_images: int = 120) -> int:
     out_ood_dir = os.path.join(base_dir, "non_burn")
     os.makedirs(out_ood_dir, exist_ok=True)
 
-    # Trích xuất đều các lớp tổn thương da liễu (u hắc tố, nốt ruồi, u mạch máu đỏ, dày sừng...)
+    # Trích xuất đều các lớp tổn thương da liễu (u hắc tố, nốt ruồi, u mạch máu đỏ, dày sừng...) không phát sinh DeprecationWarning
     if "label" in df.columns and np.issubdtype(df["label"].dtype, np.integer):
-        sampled = df.groupby("label", group_keys=False).apply(
-            lambda g: g.head(max(1, max_images // max(1, df["label"].nunique()) + 5))
-        ).head(max_images)
+        per_cls = max(1, max_images // max(1, df["label"].nunique()) + 5)
+        picked_idx = []
+        for _, grp in df.groupby("label", sort=True):
+            picked_idx.extend(grp.index[:per_cls].tolist())
+        sampled = df.loc[picked_idx[:max_images]]
     else:
         sampled = df.head(max_images)
 

@@ -420,7 +420,7 @@ def generate_failure_case_gallery(
             ax_bar.set_xlim(0, 108)
             for c_i, v_p in enumerate(p_pct):
                 ax_bar.text(v_p + 1.5, c_i, f"{v_p:.1f}%", va="center", fontsize=8.5)
-            status_txt = "✅ CAUGHT BY R-EDL GATE (Referred to MD)" if is_caught else "⚠️ SILENT ERROR (Borderline Texture)"
+            status_txt = "[CAUGHT BY R-EDL GATE -> Referred to MD]" if is_caught else "[SILENT ERROR -> Borderline Texture]"
             status_col = "#1b7837" if is_caught else "#b2182b"
             ax_bar.set_title(f"u = {u_val:.3f} (Gate τ = {tau_edl:.3f})\n{status_txt}", fontsize=9.0, color=status_col, fontweight="bold")
             ax_bar.set_xlabel("Dirichlet Projected Prob (%)", fontsize=8.5)

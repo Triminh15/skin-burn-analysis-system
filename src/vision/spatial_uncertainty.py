@@ -131,10 +131,16 @@ def compute_clinical_tbsa_and_parkland_interval(
     pixels_per_cm: Optional[float] = None,
     orig_hw: Optional[tuple] = None,
     threshold: float = 0.5,
+    skin_pixels: Optional[int] = None,
+    region_coverage: float = 1.0,
+    calibration_mode: str = "auto",
+    bsa_cm2_override: Optional[float] = None,
+    shock_threshold: float = 10.0,
 ) -> Dict[str, Any]:
     """
     Truyền độ bất định không gian từ 5-Fold Segmentation sang:
       - Khoảng % diện tích khung hình [pct_low, pct_high]
+      - Khoảng % diện tích vùng da giải phẫu [pct_burn_skin_low, pct_burn_skin_high] (Hướng 1 + Hướng 7)
       - Khoảng % TBSA cơ thể [tbsa_low, tbsa_high]
       - Khoảng thể tích dịch truyền Parkland 24h [fluid_low_ml, fluid_high_ml]
       - Cờ cảnh báo an toàn ranh giới sốc bỏng 10% TBSA (borderline_10pct_warning)
@@ -143,7 +149,6 @@ def compute_clinical_tbsa_and_parkland_interval(
     if probs.ndim == 2:
         probs = probs[np.newaxis, ...]
 
-    # Resize từng bản đồ xác suất về kích thước gốc nếu được cung cấp
     if orig_hw is not None:
         h_o, w_o = int(orig_hw[0]), int(orig_hw[1])
         resized_list: List[np.ndarray] = []
@@ -155,37 +160,57 @@ def compute_clinical_tbsa_and_parkland_interval(
     h, w = mean_prob.shape[:2]
     total_pixels = float(h * w)
 
-    # Diện tích theo từng Fold và theo dải xác suất đồng thuận [P_bar > 0.65, P_bar > 0.35]
-    fold_pcts = [float(np.count_nonzero(probs[k] > threshold) / total_pixels * 100.0) for k in range(probs.shape[0])]
-    ens_pct = float(np.count_nonzero(mean_prob > threshold) / total_pixels * 100.0)
-    fold_std_pct = float(np.std(fold_pcts, ddof=1)) if len(fold_pcts) > 1 else 0.0
+    fold_pxs = [float(np.count_nonzero(probs[k] > threshold)) for k in range(probs.shape[0])]
+    ens_px = float(np.count_nonzero(mean_prob > threshold))
+    fold_std_px = float(np.std(fold_pxs, ddof=1)) if len(fold_pxs) > 1 else 0.0
 
     if probs.shape[0] > 1:
-        pct_low = float(min(np.min(fold_pcts), max(0.0, ens_pct - 1.96 * fold_std_pct)))
-        pct_high = float(max(np.max(fold_pcts), min(100.0, ens_pct + 1.96 * fold_std_pct)))
+        px_low = float(min(np.min(fold_pxs), max(0.0, ens_px - 1.96 * fold_std_px)))
+        px_high = float(max(np.max(fold_pxs), min(total_pixels, ens_px + 1.96 * fold_std_px)))
     else:
-        # Fallback cho 1-model đơn lẻ: dùng biên độ xác suất mềm [0.65, 0.35]
-        pct_low = float(np.count_nonzero(mean_prob > 0.65) / total_pixels * 100.0)
-        pct_high = float(np.count_nonzero(mean_prob > 0.35) / total_pixels * 100.0)
+        px_low = float(np.count_nonzero(mean_prob > 0.65))
+        px_high = float(np.count_nonzero(mean_prob > 0.35))
 
-    def _pct_to_tbsa(pct_val: float) -> float:
-        burn_px = (pct_val / 100.0) * total_pixels
-        if pixels_per_cm and pixels_per_cm > 0:
-            area_cm2 = burn_px / (float(pixels_per_cm) ** 2)
-            pw = float(weight_kg if (weight_kg and weight_kg > 0) else 68.0)
-            bsa_cm2 = float(np.sqrt((170.0 * pw) / 3600.0) * 10000.0)
+    ens_pct = (ens_px / total_pixels) * 100.0
+    fold_std_pct = (fold_std_px / total_pixels) * 100.0
+    pct_low = (px_low / total_pixels) * 100.0
+    pct_high = (px_high / total_pixels) * 100.0
+
+    has_valid_ruler = bool(pixels_per_cm is not None and float(pixels_per_cm) > 0)
+    mode = (calibration_mode or "auto").lower().strip()
+    use_ruler = (mode == "ruler" and has_valid_ruler) or (mode == "auto" and has_valid_ruler)
+
+    cov = float(np.clip(region_coverage if region_coverage is not None else 1.0, 0.05, 1.0))
+    eff_region_w = float(region_weight) * cov
+    denom_skin_px = float(skin_pixels) if (skin_pixels is not None and skin_pixels > 0) else total_pixels
+
+    def _px_to_tbsa(burn_px_val: float) -> float:
+        if burn_px_val <= 0:
+            return 0.0
+        if use_ruler:
+            area_cm2 = burn_px_val / (float(pixels_per_cm) ** 2)
+            if bsa_cm2_override and bsa_cm2_override > 0:
+                bsa_cm2 = float(bsa_cm2_override)
+            else:
+                pw = float(weight_kg if (weight_kg and weight_kg > 0) else 68.0)
+                bsa_cm2 = float(np.sqrt((170.0 * pw) / 3600.0) * 10000.0)
             tbsa = (area_cm2 / bsa_cm2) * 100.0
-            return float(round(min(region_weight, max(0.0, tbsa)), 3))
-        return float(round(min(region_weight, max(0.0, (pct_val / 100.0) * region_weight)), 2))
+            return float(round(min(95.0, max(0.0, tbsa)), 3))
+        burn_of_skin_ratio = min(1.0, burn_px_val / max(1.0, denom_skin_px))
+        raw_tbsa = burn_of_skin_ratio * eff_region_w
+        prec = 2 if raw_tbsa >= 0.1 else 3
+        return float(round(min(float(region_weight), max(0.0, raw_tbsa)), prec))
 
-    tbsa_ens = _pct_to_tbsa(ens_pct)
-    tbsa_low = _pct_to_tbsa(pct_low)
-    tbsa_high = _pct_to_tbsa(pct_high)
+    tbsa_ens = _px_to_tbsa(ens_px)
+    tbsa_low = _px_to_tbsa(px_low)
+    tbsa_high = _px_to_tbsa(px_high)
     tbsa_half_width = round(0.5 * (tbsa_high - tbsa_low), 2)
 
     is_degree_1 = (predicted_class_id == 0)
-    # Cảnh báo ranh giới sốc bỏng 10% TBSA: khi ngưỡng 10% nằm trọn trong khoảng bất định [tbsa_low, tbsa_high]
-    borderline_10pct = bool((not is_degree_1) and (tbsa_low < 10.0 <= tbsa_high or (tbsa_low <= 10.0 < tbsa_high)))
+    borderline_10pct = bool(
+        (not is_degree_1)
+        and (tbsa_low < shock_threshold <= tbsa_high or (tbsa_low <= shock_threshold < tbsa_high))
+    )
 
     fluid_interval = None
     if weight_kg and weight_kg > 0 and tbsa_high > 0:

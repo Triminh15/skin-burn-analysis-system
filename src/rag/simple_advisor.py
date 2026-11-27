@@ -34,11 +34,20 @@ MEDICAL_KB = {
         "- **Kiêng khem:** Hạn chế đồ ăn quá cay nóng, chất kích thích (rượu bia, thuốc lá). Tránh ăn thức ăn gây dị ứng cá nhân."
     ),
     "parkland_info": (
-        "**Nguyên lý công thức Parkland:**\n"
-        "- Tổng dịch truyền trong 24h = **4 ml × Cân nặng (kg) × % TBSA** (bằng dung dịch Ringer Lactate).\n"
-        "- **50% lượng dịch** phải được truyền hết trong **8 giờ đầu** tính từ thời điểm bị bỏng.\n"
-        "- **50% lượng dịch còn lại** được chia đều truyền trong **16 giờ tiếp theo**.\n"
-        "- Mục tiêu theo dõi: Giữ thể tích nước tiểu đạt 0.5 - 1.0 ml/kg/giờ ở người lớn."
+        "**Nguyên lý Công thức Parkland & Chuẩn hóa % TBSA Giải phẫu:**\n"
+        "- Tổng dịch truyền trong 24h = **4 ml × Cân nặng (kg) × % TBSA cơ thể** (dung dịch Ringer Lactate).\n"
+        "- **Nguyên tắc Y khoa bắt buộc:** `% pixel vết bỏng / khung ảnh` **KHÔNG PHẢI** là `% TBSA`! "
+        "Hệ thống phải tách **Tỷ lệ Vết bỏng / Diện tích vùng da chụp được** rồi nhân với trọng số giải phẫu "
+        "**Luật số 9 Wallace** (Đầu-Cổ 9%, Tay 9%, Thân trước 18%, Thân sau 18%, Chân 18%) hoặc **Quy tắc Bàn tay 1% (Palmar Rule)** "
+        "trước khi đưa vào công thức Parkland.\n"
+        "- **Lộ trình truyền:** **50% lượng dịch** trong **8 giờ đầu** (tính từ lúc bị bỏng), **50% còn lại** chia đều trong **16 giờ tiếp theo**.\n"
+        "- **Chỉ định:** Chỉ truyền dịch tĩnh mạch khi bỏng Độ 2/Độ 3 có `% TBSA >= 10%` (tránh phù phổi cấp ở bỏng nhỏ)."
+    ),
+    "tbsa_rule_of_nines": (
+        "**Chuẩn hóa % TBSA theo Vùng Giải phẫu (Rule of Nines & Palmar 1%):**\n"
+        "- Chụp cận cảnh bàn tay chiếm 60% khung ảnh ngoài đời chỉ tương đương **~0.6% TBSA** (do bàn tay = 1% cơ thể), "
+        "trong khi chụp toàn cảnh vùng lưng chiếm 60% diện tích da lưng lại là **~10.8% TBSA** (do thân sau = 18% cơ thể).\n"
+        "- Công thức chuẩn hóa trên BurnScan: `% TBSA = (Pixel Vết bỏng / Pixel Vùng da bộ phận) × Tỷ lệ khung vùng × Trọng số Giải phẫu`."
     )
 }
 
@@ -74,8 +83,26 @@ def ask_medical_bot(query: str, clinical_context: Dict[str, Any] = None) -> str:
     if any(k in q for k in ["ăn", "uống", "dinh dưỡng", "kiêng"]):
         return MEDICAL_KB["dinh_duong"]
 
+    if any(k in q for k in ["tbsa", "luật số 9", "rule of nine", "bàn tay", "khung ảnh", "diện tích"]):
+        base_msg = MEDICAL_KB["tbsa_rule_of_nines"]
+        if clinical_context and "estimated_tbsa_pct" in clinical_context:
+            frame_pct = clinical_context.get("pct_frame_area")
+            skin_burn_pct = clinical_context.get("pct_burn_of_skin")
+            tbsa = clinical_context.get("estimated_tbsa_pct")
+            part_name = clinical_context.get("body_part_name", clinical_context.get("body_part", ""))
+            if frame_pct is not None and skin_burn_pct is not None:
+                base_msg += (
+                    f"\n- **Áp dụng trên ca hiện tại ({part_name}):** Vết bỏng chiếm `{frame_pct}%` khung hình, "
+                    f"`{skin_burn_pct}%` vùng da chụp được → quy đổi chuẩn xác thành **`{tbsa}% TBSA`**."
+                )
+        return base_msg
+
     if any(k in q for k in ["truyền", "parkland", "dịch", "ringer"]):
-        return MEDICAL_KB["parkland_info"]
+        base_msg = MEDICAL_KB["parkland_info"]
+        if clinical_context and clinical_context.get("parkland_plan"):
+            pk = clinical_context["parkland_plan"]
+            base_msg += f"\n- **Chỉ định ca hiện tại:** {pk.get('clinical_guidance', '')}"
+        return base_msg
 
     # Phản hồi mặc định kết hợp thông tin lâm sàng hiện tại nếu có
     res = "Bác sĩ AI BurnScan ghi nhận câu hỏi của bạn. "

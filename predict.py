@@ -34,6 +34,7 @@ from albumentations.pytorch import ToTensorV2
 
 from src.vision.models import build_segmentation_model, build_classification_model
 from src.vision.postprocessing import clean_binary_mask, calculate_burn_area_percentage, get_burn_bounding_box, crop_roi
+from src.vision.anatomical_tbsa import compute_anatomical_tbsa, ANATOMICAL_REGIONS
 from src.vision.transforms import IMAGENET_MEAN, IMAGENET_STD
 from src.utils.gradcam import GradCAM, get_target_layer_for_model
 
@@ -97,7 +98,9 @@ def predict_pipeline(
     seg_model: torch.nn.Module,
     cls_model: torch.nn.Module,
     device: str = "cpu",
-    output_path: str = "outputs/figures/prediction_result.png"
+    output_path: str = "outputs/figures/prediction_result.png",
+    body_part: str = "chest_abdomen",
+    region_coverage: float = 1.0,
 ) -> Dict[str, Any]:
     """
     Quy trình xử lý hoàn chỉnh từ ảnh thô đến chẩn đoán cuối cùng.
@@ -130,10 +133,17 @@ def predict_pipeline(
     mask_prob_resized = cv2.resize(seg_prob, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     raw_binary_mask = (mask_prob_resized > 0.5).astype(np.uint8) * 255
 
-    # 4. HẬU XỬ LÝ HÌNH THÁI HỌC & TÍNH TOÁN % TBSA
-    print("✂️ [2/3] Đang lọc nhiễu, tính % TBSA và cắt vùng quan tâm (ROI)...")
+    # 4. HẬU XỬ LÝ HÌNH THÁI HỌC & CHUẨN HÓA % TBSA GIẢI PHẪU
+    print("✂️ [2/3] Đang lọc nhiễu, phân đoạn vùng da chụp được và chuẩn hóa % TBSA theo Rule of Nines...")
     cleaned_mask = clean_binary_mask(raw_binary_mask, min_area=50)
     burn_percentage = calculate_burn_area_percentage(cleaned_mask)
+    tbsa_info = compute_anatomical_tbsa(
+        burn_mask=cleaned_mask,
+        image_rgb=orig_rgb,
+        body_part=body_part,
+        region_coverage=region_coverage,
+        calibration_mode="anatomical",
+    )
     bbox = get_burn_bounding_box(cleaned_mask, padding_ratio=0.15)
 
     # Cắt ROI hình vuông 224x224
@@ -178,18 +188,26 @@ def predict_pipeline(
     axes[0].set_title(f"1. Ảnh gốc ban đầu\n({orig_w}x{orig_h} px)", fontsize=11, fontweight="bold")
     axes[0].axis("off")
 
-    # Ô 2: Mặt nạ phân đoạn phủ lên vết thương
+    # Ô 2: Mặt nạ phân đoạn phủ lên vết thương + viền vùng da bộ phận
     overlay = orig_rgb.copy()
     colored_mask = np.zeros_like(orig_rgb)
     colored_mask[cleaned_mask > 0] = [0, 255, 255] # Màu Cyan
     overlay = cv2.addWeighted(overlay, 0.7, colored_mask, 0.3, 0)
+    skin_mask = tbsa_info.get("skin_mask")
+    if skin_mask is not None and tbsa_info["pct_skin_in_frame"] < 97.0:
+        skin_contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, skin_contours, -1, (0, 180, 255), 2)
     contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2) # Viền xanh lá
     if bbox is not None:
         cv2.rectangle(overlay, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2) # Hộp bao ROI màu đỏ
 
     axes[1].imshow(overlay)
-    axes[1].set_title(f"2. Khoanh vùng U-Net\nDiện tích: {burn_percentage}% khung hình", fontsize=11, fontweight="bold")
+    axes[1].set_title(
+        f"2. Khoanh vùng U-Net & Vùng da\nBỏng/Da: {tbsa_info['pct_burn_of_skin']}% → {tbsa_info['estimated_tbsa_pct']}% TBSA",
+        fontsize=10.5,
+        fontweight="bold",
+    )
     axes[1].axis("off")
 
     # Ô 3: Vùng quan tâm (ROI 224x224)
@@ -223,20 +241,26 @@ def predict_pipeline(
     plt.savefig(output_path, bbox_inches="tight")
     plt.close()
 
-    print("\n" + "=" * 65)
+    print("\n" + "=" * 72)
     print("📋 KẾT QUẢ CHẨN ĐOÁN LÂM SÀNG TỔNG HỢP:")
-    print("=" * 65)
-    print(f"• Diện tích tổn thương (% TBSA) : {burn_percentage}%")
-    print(f"• Cấp độ bỏng dự đoán          : {pred_class_name}")
-    print(f"• Độ tin cậy (Confidence)      : {pred_confidence:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 1         : {cls_probs[0]*100:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 2         : {cls_probs[1]*100:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 3 (Nặng)  : {cls_probs[2]*100:.2f}%")
+    print("=" * 72)
+    print(f"• Vùng giải phẫu chuẩn hóa       : {tbsa_info['body_part_name']} ({tbsa_info['region_weight_pct']}%)")
+    print(f"• Tỷ lệ Vết bỏng / Khung ảnh     : {burn_percentage}% (KHÔNG dùng tính Parkland)")
+    print(f"• Tỷ lệ Vết bỏng / Vùng da chụp  : {tbsa_info['pct_burn_of_skin']}% (Vùng da = {tbsa_info['pct_skin_in_frame']}% ảnh)")
+    print(f"• Diện tích chuẩn hóa (% TBSA)   : {tbsa_info['estimated_tbsa_pct']}% TBSA")
+    print(f"• Cấp độ bỏng dự đoán            : {pred_class_name}")
+    print(f"• Độ tin cậy (Confidence)        : {pred_confidence:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 1           : {cls_probs[0]*100:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 2           : {cls_probs[1]*100:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 3 (Nặng)    : {cls_probs[2]*100:.2f}%")
     print(f"🖼️ Đã xuất ảnh chẩn đoán trực quan tại: {output_path}")
-    print("=" * 65)
+    print("=" * 72)
 
     return {
         "burn_percentage": burn_percentage,
+        "pct_burn_of_skin": tbsa_info["pct_burn_of_skin"],
+        "estimated_tbsa_pct": tbsa_info["estimated_tbsa_pct"],
+        "body_part": body_part,
         "predicted_class": pred_class_name,
         "confidence": pred_confidence,
         "probabilities": cls_probs,
@@ -247,6 +271,10 @@ def predict_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="Chẩn đoán ảnh vết bỏng bằng chuỗi Pipeline 2 Giai đoạn")
     parser.add_argument("--image", type=str, required=True, help="Đường dẫn đến file ảnh thô cần chẩn đoán")
+    parser.add_argument("--body_part", type=str, default="chest_abdomen", choices=list(ANATOMICAL_REGIONS.keys()),
+                        help="Vùng cơ thể theo Luật số 9 Wallace / Quy tắc bàn tay 1%%")
+    parser.add_argument("--region_coverage", type=float, default=1.0,
+                        help="Tỷ lệ diện tích bộ phận xuất hiện trong khung ảnh (0.1 -> 1.0)")
     parser.add_argument("--seg_checkpoint", type=str, default="outputs/checkpoints/unet_resnet34_focal_tversky_best.pth",
                         help="Đường dẫn file trọng số tốt nhất của U-Net")
     parser.add_argument("--cls_checkpoint", type=str, default="outputs/checkpoints/cls_resnet34_weighted_ce_best.pth",
@@ -269,7 +297,9 @@ def main():
         seg_model=seg_model,
         cls_model=cls_model,
         device=args.device,
-        output_path=args.output
+        output_path=args.output,
+        body_part=args.body_part,
+        region_coverage=args.region_coverage,
     )
 
 
