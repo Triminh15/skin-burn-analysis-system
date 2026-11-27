@@ -12,6 +12,7 @@ Hỗ trợ:
 
 import os
 import sys
+import random
 import argparse
 import json
 import time
@@ -31,6 +32,7 @@ from tqdm import tqdm
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 # Đảm bảo thư mục gốc dự án luôn nằm trong sys.path
@@ -46,7 +48,9 @@ from src.vision.models import build_segmentation_model, count_parameters
 
 
 def set_seed(seed: int = 42):
-    """Cố định seed ngẫu nhiên đảm bảo kết quả khoa học tái lập 100%."""
+    """Cố định seed ngẫu nhiên toàn diện (Python random, NumPy, PyTorch, CuDNN) đảm bảo tái lập 100%."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -55,14 +59,29 @@ def set_seed(seed: int = 42):
         torch.backends.cudnn.benchmark = False
 
 
+def extract_boundary_mask_gpu(masks: torch.Tensor, kernel_size: int = 5) -> torch.Tensor:
+    """
+    Sinh Ground-Truth viền ban đỏ trực tiếp trên GPU bằng toán tử Morphological Gradient:
+    B_GT = Dilation(M_GT) - Erosion(M_GT)
+    Thực hiện bằng Max-Pooling 2D siêu tốc (0.1ms), hoàn toàn không tắc nghẽn I/O.
+    """
+    pad = kernel_size // 2
+    dilated = F.max_pool2d(masks, kernel_size=kernel_size, stride=1, padding=pad)
+    eroded = -F.max_pool2d(-masks, kernel_size=kernel_size, stride=1, padding=pad)
+    boundary = (dilated - eroded).clamp(0.0, 1.0)
+    return boundary
+
+
 def train_one_epoch(
     model: nn.Module,
     dataloader: DataLoader,
     criterion: nn.Module,
     optimizer: torch.optim.Optimizer,
-    device: torch.device
+    device: torch.device,
+    bnd_criterion: nn.Module = None,
+    bnd_weight: float = 0.2,
 ) -> Tuple[float, float, float]:
-    """Huấn luyện mô hình qua 1 Epoch."""
+    """Huấn luyện mô hình qua 1 Epoch (hỗ trợ Deep Boundary Supervision ổn định)."""
     model.train()
     running_loss = 0.0
     tracker = SegmentationMetricTracker()
@@ -73,8 +92,21 @@ def train_one_epoch(
         masks = batch["mask"].to(device)
 
         optimizer.zero_grad()
-        logits = model(images)
-        loss = criterion(logits, masks)
+        outputs = model(images)
+
+        # Hỗ trợ Deep Boundary Supervision cho EA-UNet (luôn dùng ComboLoss ổn định cho viền mỏng)
+        if isinstance(outputs, tuple):
+            mask_logits, bnd_logits = outputs
+            loss_mask = criterion(mask_logits, masks)
+            bnd_targets = extract_boundary_mask_gpu(masks)
+            aux_fn = bnd_criterion if bnd_criterion is not None else criterion
+            loss_bnd = aux_fn(bnd_logits, bnd_targets)
+            loss = loss_mask + bnd_weight * loss_bnd
+            logits = mask_logits
+        else:
+            logits = outputs
+            loss = criterion(logits, masks)
+
         loss.backward()
         optimizer.step()
 
@@ -87,24 +119,55 @@ def train_one_epoch(
     return epoch_loss, metrics["dice"], metrics["iou"]
 
 
+def forward_seg_tta(model: nn.Module, images: torch.Tensor) -> torch.Tensor:
+    """
+    Test-Time Augmentation (4x Flip Averaging: Gốc, Lật ngang, Lật dọc, Lật 2 chiều).
+    Tăng độ mượt và chính xác ranh giới quầng bỏng mà không phát sinh thêm tham số.
+    """
+    out0 = model(images)
+    logits0 = out0[0] if isinstance(out0, tuple) else out0
+    p0 = torch.sigmoid(logits0)
+
+    img_h = torch.flip(images, dims=[3])
+    out_h = model(img_h)
+    p_h = torch.flip(torch.sigmoid(out_h[0] if isinstance(out_h, tuple) else out_h), dims=[3])
+
+    img_v = torch.flip(images, dims=[2])
+    out_v = model(img_v)
+    p_v = torch.flip(torch.sigmoid(out_v[0] if isinstance(out_v, tuple) else out_v), dims=[2])
+
+    img_hv = torch.flip(images, dims=[2, 3])
+    out_hv = model(img_hv)
+    p_hv = torch.flip(torch.sigmoid(out_hv[0] if isinstance(out_hv, tuple) else out_hv), dims=[2, 3])
+
+    p_mean = 0.25 * (p0 + p_h + p_v + p_hv)
+    return torch.logit(p_mean.clamp(1e-6, 1.0 - 1e-6))
+
+
 def validate(
     model: nn.Module,
     dataloader: DataLoader,
     criterion: nn.Module,
-    device: torch.device
+    device: torch.device,
+    use_tta: bool = False,
 ) -> Tuple[float, float, float, float]:
-    """Đánh giá mô hình trên tập Validation hoặc Test."""
+    """Đánh giá mô hình trên tập Validation hoặc Test (hỗ trợ TTA 4 hướng)."""
     model.eval()
     running_loss = 0.0
     tracker = SegmentationMetricTracker()
 
     with torch.no_grad():
-        pbar = tqdm(dataloader, desc="  Eval ", leave=False, dynamic_ncols=True)
+        desc_str = "  TTA  " if use_tta else "  Eval "
+        pbar = tqdm(dataloader, desc=desc_str, leave=False, dynamic_ncols=True)
         for batch in pbar:
             images = batch["image"].to(device)
             masks = batch["mask"].to(device)
 
-            logits = model(images)
+            if use_tta:
+                logits = forward_seg_tta(model, images)
+            else:
+                outputs = model(images)
+                logits = outputs[0] if isinstance(outputs, tuple) else outputs
             loss = criterion(logits, masks)
 
             running_loss += loss.item() * images.size(0)
@@ -149,10 +212,18 @@ def plot_training_curves(history: Dict[str, list], save_path: str, run_name: str
 
 def main():
     parser = argparse.ArgumentParser(description="Script Huấn luyện Phân đoạn Vết bỏng (Segmentation Training)")
-    parser.add_argument("--arch", type=str, default="unet", choices=["unet", "unetplusplus"], help="Kiến trúc mô hình")
+    parser.add_argument(
+        "--arch",
+        type=str,
+        default="ea_unet",
+        choices=["unet", "unetplusplus", "ea_unet", "eaunet", "ea-unet"],
+        help="Kiến trúc mô hình: unet, unetplusplus, hoặc ea_unet (Erythema-Aware Dual-Branch)"
+    )
     parser.add_argument("--backbone", type=str, default="resnet34", help="Backbone encoder (resnet34, tu-convnext_tiny)")
     parser.add_argument("--attention", type=str, default="none", choices=["none", "scse"], help="Cơ chế Attention Gate")
     parser.add_argument("--loss", type=str, default="combo", choices=["combo", "focal_tversky"], help="Hàm mất mát")
+    parser.add_argument("--bnd-weight", "--bnd_weight", type=float, default=0.2, help="Trọng số giám sát viền ban đỏ cho EA-UNet")
+    parser.add_argument("--no-tta", action="store_true", help="Tắt đánh giá bổ sung 4x Test-Time Augmentation (TTA) trên tập Test")
     parser.add_argument("--epochs", type=int, default=35, help="Số epoch tối đa")
     parser.add_argument("--batch-size", type=int, default=16, help="Kích thước batch")
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate khởi tạo")
@@ -208,10 +279,13 @@ def main():
         transform=get_val_transforms(img_size=args.img_size)
     )
 
+    train_gen = torch.Generator()
+    train_gen.manual_seed(args.seed)
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
+        generator=train_gen,
         num_workers=0,  # 0 là an toàn tuyệt đối trên Windows
         pin_memory=torch.cuda.is_available()
     )
@@ -249,6 +323,7 @@ def main():
     print(f"  -> Tổng số tham số: {total_params / 1e6:.2f}M ({trainable_params / 1e6:.2f}M cần huấn luyện)")
 
     criterion = get_segmentation_loss(name=args.loss)
+    bnd_criterion = get_segmentation_loss(name="combo")
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
 
@@ -278,7 +353,8 @@ def main():
 
         # Huấn luyện 1 epoch
         train_loss, train_dice, train_iou = train_one_epoch(
-            model, train_loader, criterion, optimizer, device
+            model, train_loader, criterion, optimizer, device,
+            bnd_criterion=bnd_criterion, bnd_weight=args.bnd_weight,
         )
 
         # Đánh giá trên tập Validation
@@ -347,8 +423,14 @@ def main():
         print("• Cảnh báo: Không tìm thấy checkpoint tốt nhất, dùng trọng số epoch cuối.")
 
     test_loss, test_dice, test_iou, test_acc = validate(
-        model, test_loader, criterion, device
+        model, test_loader, criterion, device, use_tta=False
     )
+
+    tta_dice, tta_iou, tta_acc = None, None, None
+    if not args.no_tta:
+        _, tta_dice, tta_iou, tta_acc = validate(
+            model, test_loader, criterion, device, use_tta=True
+        )
 
     test_results = {
         "run_name": args.run_name,
@@ -362,6 +444,8 @@ def main():
         "test_dice": round(test_dice, 4),
         "test_iou": round(test_iou, 4),
         "test_pixel_accuracy": round(test_acc, 4),
+        "test_dice_tta": round(tta_dice, 4) if tta_dice is not None else None,
+        "test_iou_tta": round(tta_iou, 4) if tta_iou is not None else None,
         "training_time_minutes": round(total_training_time / 60, 2),
     }
 
@@ -372,12 +456,15 @@ def main():
     print(f"┌───────────────────────────────┬───────────────────────────────┐")
     print(f"│ Chỉ số Đánh giá               │ Giá trị đạt được              │")
     print(f"├───────────────────────────────┼───────────────────────────────┤")
-    print(f"│ 1. Test Dice Score (F1)       │ {test_dice * 100:6.2f}%                       │")
+    print(f"│ 1. Test Dice Score (Standard) │ {test_dice * 100:6.2f}%                       │")
     print(f"│ 2. Test IoU (Jaccard Index)   │ {test_iou * 100:6.2f}%                       │")
-    print(f"│ 3. Test Pixel Accuracy        │ {test_acc * 100:6.2f}%                       │")
-    print(f"│ 4. Test Loss                  │ {test_loss:6.4f}                         │")
-    print(f"│ 5. Best Val Dice              │ {best_val_dice * 100:6.2f}%                       │")
-    print(f"│ 6. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
+    if tta_dice is not None:
+        print(f"│ 3. Test Dice (+4x TTA)        │ {tta_dice * 100:6.2f}%                       │")
+        print(f"│ 4. Test IoU (+4x TTA)         │ {tta_iou * 100:6.2f}%                       │")
+    print(f"│ 5. Test Pixel Accuracy        │ {test_acc * 100:6.2f}%                       │")
+    print(f"│ 6. Test Loss                  │ {test_loss:6.4f}                         │")
+    print(f"│ 7. Best Val Dice              │ {best_val_dice * 100:6.2f}%                       │")
+    print(f"│ 8. Model Parameters           │ {total_params / 1e6:6.2f}M                        │")
     print(f"└───────────────────────────────┴───────────────────────────────┘")
     print(f"💾 File kết quả JSON đã lưu tại: {test_json_path}")
     print("=" * 75)

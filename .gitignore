@@ -5,6 +5,8 @@ venv/
 env/
 data/raw/*
 data/processed/*
+data/external_ood/*
+data/splits/kfold/
 knowledge_base/chroma_db/*
 outputs/checkpoints/*
 outputs/figures/*

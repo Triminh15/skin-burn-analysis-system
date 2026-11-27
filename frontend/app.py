@@ -50,6 +50,7 @@ def sanitize_json(data):
     return data
 from src.database.db import init_db, get_db, Patient, AnalysisSession
 from src.vision.burn_analyzer import BurnAnalyzer
+from src.vision.anatomical_tbsa import ANATOMICAL_REGIONS, get_age_adjusted_region_weight, estimate_mosteller_bsa_cm2
 from src.utils.report_generator import generate_burn_report_pdf
 
 app = FastAPI(title="BurnScan Clinical System API", version="2.0.0")
@@ -142,7 +143,10 @@ async def list_models():
         seg_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.seg_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
@@ -152,100 +156,10 @@ async def list_models():
         cls_list.append({
             "key": key,
             "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
-            "active": analyzer is not None and analyzer.cls_model_key == key,
-            "metrics": _read_metrics_file(cfg.get("metrics_file")),
-        })
-
-    return {
-        "active_segmentation": analyzer.seg_model_key if analyzer else DEFAULT_SEG_MODEL,
-        "active_classification": analyzer.cls_model_key if analyzer else DEFAULT_CLS_MODEL,
-        "segmentation_models": seg_list,
-        "classification_models": cls_list,
-    }
-
-class ModelSwitchRequest(BaseModel):
-    seg_model_key: Optional[str] = None
-    cls_model_key: Optional[str] = None
-
-@app.post("/api/models/switch")
-async def switch_models(payload: ModelSwitchRequest):
-    """Chuyển đổi cặp trọng số Segmentation / Classification đang chạy"""
-    global analyzer
-    seg_key = payload.seg_model_key or (analyzer.seg_model_key if analyzer else DEFAULT_SEG_MODEL)
-    cls_key = payload.cls_model_key or (analyzer.cls_model_key if analyzer else DEFAULT_CLS_MODEL)
-
-    if seg_key not in SEGMENTATION_MODELS:
-        raise HTTPException(status_code=400, detail=f"Model phân đoạn không hợp lệ: {seg_key}")
-    if cls_key not in CLASSIFICATION_MODELS:
-        raise HTTPException(status_code=400, detail=f"Model phân loại không hợp lệ: {cls_key}")
-
-    new_analyzer = BurnAnalyzer(seg_model_key=seg_key, cls_model_key=cls_key)
-    new_analyzer.load_models()
-    analyzer = new_analyzer
-    return {
-        "status": "success",
-        "active_segmentation": analyzer.seg_model_key,
-        "active_classification": analyzer.cls_model_key,
-    }
-
-@app.get("/api/health")
-async def health_check(db: Session = Depends(get_db)):
-    """Kiểm tra trạng thái hoạt động của Backend, CSDL SQLite và AI Models"""
-    total_sessions = db.query(func.count(AnalysisSession.id)).scalar() or 0
-    return {
-        "status": "ok",
-        "models_loaded": analyzer is not None,
-        "database_connected": True,
-        "total_sessions": total_sessions
-    }
-
-@app.get("/api/stats")
-async def get_clinical_stats(db: Session = Depends(get_db)):
-    """Thống kê tổng hợp các ca khám trong CSDL SQLite"""
-    total_sessions = db.query(func.count(AnalysisSession.id)).scalar() or 0
-    total_patients = db.query(func.count(Patient.id)).scalar() or 0
-    urgent_cases = db.query(func.count(AnalysisSession.id)).filter(AnalysisSession.urgent_triage == True).scalar() or 0
-    degree_rows = (
-        db.query(AnalysisSession.predicted_degree, func.count(AnalysisSession.id))
-        .group_by(AnalysisSession.predicted_degree)
-        .all()
-    )
-    return {
-        "total_sessions": total_sessions,
-        "total_patients": total_patients,
-        "urgent_cases": urgent_cases,
-        "by_degree": {deg or "Chưa rõ": cnt for deg, cnt in degree_rows}
-    }
-
-def _read_metrics_file(path: str):
-    if path and os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
-
-@app.get("/api/models")
-async def list_models():
-    """Liệt kê tất cả trọng số đã huấn luyện trong outputs/checkpoints và mô hình đang kích hoạt"""
-    seg_list = []
-    for key, cfg in SEGMENTATION_MODELS.items():
-        seg_list.append({
-            "key": key,
-            "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
-            "active": analyzer is not None and analyzer.seg_model_key == key,
-            "metrics": _read_metrics_file(cfg.get("metrics_file")),
-        })
-
-    cls_list = []
-    for key, cfg in CLASSIFICATION_MODELS.items():
-        cls_list.append({
-            "key": key,
-            "name": cfg["name"],
-            "available": os.path.exists(cfg["checkpoint"]),
+            "available": (
+                (bool(cfg.get("checkpoints")) and all(os.path.exists(p) for p in cfg["checkpoints"]))
+                or os.path.exists(cfg["checkpoint"])
+            ),
             "active": analyzer is not None and analyzer.cls_model_key == key,
             "metrics": _read_metrics_file(cfg.get("metrics_file")),
         })
@@ -286,8 +200,11 @@ async def switch_models(payload: ModelSwitchRequest):
 async def analyze_burn(
     file: UploadFile = File(...),
     pixels_per_cm: Optional[float] = Form(None),
+    calibration_mode: str = Form("auto"),
     body_part: str = Form("chest_abdomen"),
+    region_coverage: float = Form(1.0),
     weight_kg: float = Form(65.0),
+    height_cm: Optional[float] = Form(None),
     burn_time_hours: float = Form(1.0),
     patient_name: str = Form("Bệnh nhân vãng lai"),
     patient_age: Optional[str] = Form(None),
@@ -304,6 +221,10 @@ async def analyze_burn(
             parsed_age = int(str(patient_age).strip())
         except ValueError:
             parsed_age = None
+
+    effective_px_per_cm: Optional[float] = None
+    if calibration_mode != "anatomical" and pixels_per_cm is not None and pixels_per_cm > 0:
+        effective_px_per_cm = float(pixels_per_cm)
 
     session_id = str(uuid.uuid4())[:8]
     ext = os.path.splitext(file.filename)[1].lower()
@@ -322,12 +243,17 @@ async def analyze_burn(
         raise HTTPException(status_code=400, detail="Không thể giải mã file ảnh.")
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
-    # Chạy AI Pipeline
+    # Chạy AI Pipeline với chuẩn hóa giải phẫu Rule of Nines / Palmar 1% / Vùng da chụp được
     results = analyzer.analyze(
         image_input=image_rgb,
-        pixels_per_cm=pixels_per_cm,
+        pixels_per_cm=effective_px_per_cm,
         body_part=body_part,
-        weight_kg=weight_kg
+        weight_kg=weight_kg,
+        region_coverage=region_coverage,
+        calibration_mode=calibration_mode,
+        patient_age=parsed_age,
+        burn_time_hours=burn_time_hours,
+        height_cm=height_cm,
     )
 
     overlay_filename = f"{session_id}_overlay.png"
@@ -349,12 +275,20 @@ async def analyze_burn(
         cv2.imwrite(gradcam_path, cv2.cvtColor(results["classification"]["gradcam_image"], cv2.COLOR_RGB2BGR))
         has_gradcam = True
 
+    uncertainty_filename = f"{session_id}_uncertainty.png"
+    uncertainty_path = os.path.join(UPLOAD_DIR, uncertainty_filename)
+    has_uncertainty_map = False
+    if results["visualizations"].get("uncertainty_heatmap") is not None:
+        cv2.imwrite(uncertainty_path, cv2.cvtColor(results["visualizations"]["uncertainty_heatmap"], cv2.COLOR_RGB2BGR))
+        has_uncertainty_map = True
+
     # Lưu thông tin vào CSDL SQLite
     patient = Patient(
         patient_code=f"BN-{int(datetime.utcnow().timestamp()) % 100000}",
         name=patient_name,
         age=parsed_age,
         gender=patient_gender,
+        height_cm=height_cm,
         weight_kg=weight_kg
     )
     db.add(patient)
@@ -369,8 +303,10 @@ async def analyze_burn(
         session_uuid=session_id,
         patient_id=patient.id,
         body_part=body_part,
+        region_coverage=m.get("region_coverage", 1.0),
+        calibration_mode=m.get("calibration_mode", "anatomical"),
         burn_time_hours=burn_time_hours,
-        pixels_per_cm=pixels_per_cm,
+        pixels_per_cm=effective_px_per_cm,
         original_image_path=f"/uploads/{original_filename}",
         overlay_image_path=f"/uploads/{overlay_filename}",
         contours_image_path=f"/uploads/{contours_filename}",
@@ -379,6 +315,8 @@ async def analyze_burn(
         total_pixels=m.get("total_pixels", 0),
         burn_pixels=m.get("burn_pixels", 0),
         pct_frame_area=m.get("pct_frame_area", 0.0),
+        pct_skin_in_frame=m.get("pct_skin_in_frame", 100.0),
+        pct_burn_of_skin=m.get("pct_burn_of_skin", 0.0),
         area_cm2=m.get("area_cm2"),
         estimated_tbsa_pct=m.get("estimated_tbsa_pct", 0.0),
         predicted_degree=c.get("predicted_degree", "Độ 1"),
@@ -398,6 +336,10 @@ async def analyze_burn(
     clean_classification = {
         "predicted_degree": c.get("predicted_degree", "Độ 1"),
         "confidence": c.get("confidence", 0.0),
+        "epistemic_uncertainty": c.get("epistemic_uncertainty"),
+        "uncertainty_threshold": c.get("uncertainty_threshold"),
+        "ensemble_size": c.get("ensemble_size", 1),
+        "is_edl": c.get("is_edl", False),
         "is_abstaining": c.get("is_abstaining", False),
         "ethical_status": c.get("ethical_status", "ACCEPT"),
         "abstain_message": c.get("abstain_message", ""),
@@ -412,6 +354,7 @@ async def analyze_burn(
             "patient_code": patient.patient_code,
             "age": patient.age,
             "gender": patient.gender,
+            "height_cm": patient.height_cm,
             "weight_kg": patient.weight_kg
         },
         "metrics": m,
@@ -421,7 +364,8 @@ async def analyze_burn(
             "overlay": f"/uploads/{overlay_filename}",
             "contours": f"/uploads/{contours_filename}",
             "roi": f"/uploads/{roi_filename}",
-            "gradcam": f"/uploads/{gradcam_filename}" if has_gradcam else None
+            "gradcam": f"/uploads/{gradcam_filename}" if has_gradcam else None,
+            "uncertainty_heatmap": f"/uploads/{uncertainty_filename}" if has_uncertainty_map else None,
         },
         "created_at": db_session.created_at.strftime("%d/%m/%Y %H:%M")
     })
@@ -463,15 +407,31 @@ async def get_session_detail(session_id: str, db: Session = Depends(get_db)):
     if not s:
         raise HTTPException(status_code=404, detail="Không tìm thấy ca khám.")
 
-    parkland = None
-    if s.parkland_total_ml:
-        parkland = {
-            "total_fluid_24h_ml": round(s.parkland_total_ml, 1),
-            "first_8h_ml": round(s.parkland_first_8h_ml, 1) if s.parkland_first_8h_ml else round(s.parkland_total_ml / 2, 1),
-            "rate_first_8h_ml_h": round(s.parkland_rate_8h_ml_h, 1) if s.parkland_rate_8h_ml_h else None,
-            "rate_next_16h_ml_h": round(s.parkland_rate_16h_ml_h, 1) if s.parkland_rate_16h_ml_h else None,
-            "urgent_triage": bool(s.urgent_triage)
-        }
+    p_age = s.patient.age if s.patient else None
+    p_height = getattr(s.patient, "height_cm", None) if s.patient else None
+    p_weight = s.patient.weight_kg if s.patient else 65.0
+    reg_w, reg_name, atlas_method = get_age_adjusted_region_weight(s.body_part or "chest_abdomen", p_age)
+    bsa_cm2 = estimate_mosteller_bsa_cm2(weight_kg=p_weight, age=p_age, height_cm=p_height)
+    tbsa_val = round(s.estimated_tbsa_pct, 3) if s.estimated_tbsa_pct else 0.0
+    calib_mode = getattr(s, "calibration_mode", None) or ("ruler" if s.pixels_per_cm else "anatomical")
+    reg_cov = getattr(s, "region_coverage", None) or 1.0
+    pct_skin = round(getattr(s, "pct_skin_in_frame", 100.0) or 100.0, 1)
+    pct_burn_skin = round(getattr(s, "pct_burn_of_skin", s.pct_frame_area or 0.0) or 0.0, 1)
+    est_area = round(s.area_cm2, 1) if s.area_cm2 else (round((tbsa_val / 100.0) * bsa_cm2, 1) if tbsa_val > 0 else None)
+
+    is_deg_1 = "1" in str(s.predicted_degree or "")
+    is_indicated = bool((not is_deg_1) and (tbsa_val >= 10.0))
+    raw_ml = round(4.0 * p_weight * tbsa_val, 1)
+
+    parkland = {
+        "indicated": is_indicated,
+        "calculated_raw_ml": raw_ml,
+        "total_fluid_24h_ml": round(s.parkland_total_ml, 1) if (is_indicated and s.parkland_total_ml) else (raw_ml if is_indicated else 0.0),
+        "first_8h_ml": round(s.parkland_first_8h_ml, 1) if (is_indicated and s.parkland_first_8h_ml) else (round(raw_ml * 0.5, 1) if is_indicated else 0.0),
+        "rate_first_8h_ml_h": round(s.parkland_rate_8h_ml_h, 1) if (is_indicated and s.parkland_rate_8h_ml_h) else 0.0,
+        "rate_next_16h_ml_h": round(s.parkland_rate_16h_ml_h, 1) if (is_indicated and s.parkland_rate_16h_ml_h) else 0.0,
+        "urgent_triage": bool(s.urgent_triage),
+    }
 
     return sanitize_json({
         "status": "success",
@@ -479,19 +439,28 @@ async def get_session_detail(session_id: str, db: Session = Depends(get_db)):
         "patient": {
             "name": s.patient.name if s.patient else "Bệnh nhân vãng lai",
             "patient_code": s.patient.patient_code if s.patient else f"BN-{s.session_uuid}",
-            "age": s.patient.age if s.patient else None,
+            "age": p_age,
             "gender": s.patient.gender if s.patient else "Chưa rõ",
-            "weight_kg": s.patient.weight_kg if s.patient else 65.0
+            "weight_kg": p_weight
         },
         "metrics": {
             "total_pixels": s.total_pixels,
             "burn_pixels": s.burn_pixels,
             "pct_frame_area": round(s.pct_frame_area, 1) if s.pct_frame_area else 0.0,
+            "pct_skin_in_frame": pct_skin,
+            "pct_burn_of_skin": pct_burn_skin,
             "area_cm2": round(s.area_cm2, 1) if s.area_cm2 else None,
+            "estimated_area_cm2": est_area,
+            "area_is_estimated": s.area_cm2 is None,
             "body_part": s.body_part,
+            "body_part_name": reg_name,
+            "region_weight_pct": reg_w,
+            "region_coverage": reg_cov,
+            "calibration_mode": calib_mode,
+            "atlas_method": atlas_method,
             "burn_time_hours": s.burn_time_hours or 1.0,
             "pixels_per_cm": s.pixels_per_cm,
-            "estimated_tbsa_pct": round(s.estimated_tbsa_pct, 3) if s.estimated_tbsa_pct else 0.0,
+            "estimated_tbsa_pct": tbsa_val,
             "parkland_plan": parkland
         },
         "classification": {

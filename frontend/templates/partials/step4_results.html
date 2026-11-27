@@ -125,8 +125,8 @@
 
             <!-- Bottom Floating Caption -->
             <div class="absolute bottom-3 left-4 right-4 z-40 flex items-center justify-between text-white/80 text-[11px] pointer-events-none">
-              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md">Kéo thanh trượt trái-phải để so sánh ảnh gốc và mặt nạ phân đoạn U-Net</span>
-              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md font-mono" id="viewer-res-dim">2048 × 1536 px</span>
+              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md">Chế độ Đường viền: Xanh lam = Vùng da bộ phận · Vàng = Vết bỏng · Xanh lá = ROI</span>
+              <span class="px-2 py-0.5 rounded bg-black/50 backdrop-blur-md font-mono" id="viewer-res-dim">-- × -- px</span>
             </div>
 
           </div>
@@ -138,8 +138,8 @@
           
           <div class="inset-grouped p-5 flex flex-col gap-4">
             <div class="flex items-center justify-between border-b pb-3 border-gray-100">
-              <h3 class="text-[16px] font-bold text-gray-900">Số đo định lượng tổn thương</h3>
-              <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">U-Net AI</span>
+              <h3 class="text-[16px] font-bold text-gray-900">Số đo định lượng & Chuẩn hóa TBSA</h3>
+              <span id="badge-calib-mode" class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800">Rule of Nines AI</span>
             </div>
 
             <!-- Inset List -->
@@ -148,37 +148,53 @@
               <div class="flex items-center justify-between p-3.5 bg-white">
                 <div class="flex flex-col">
                   <span class="text-[13px] font-medium text-gray-900">Số pixel vết bỏng</span>
-                  <span class="text-[11px] text-gray-500">Mặt cắt nhị phân (Binary Mask)</span>
+                  <span class="text-[11px] text-gray-500">Mặt nạ nhị phân U-Net (Binary Mask)</span>
                 </div>
                 <span id="metric-burn-pixels" class="text-[15px] font-bold text-gray-900 tabular-nums">25.660 px</span>
               </div>
 
-              <!-- Row 2: Frame Ratio -->
+              <!-- Row 2: Frame Ratio (Explicitly marked NOT TBSA) -->
               <div class="flex items-center justify-between p-3.5 bg-white">
                 <div class="flex flex-col">
-                  <span class="text-[13px] font-medium text-gray-900">Tỉ lệ trên khung hình</span>
-                  <span class="text-[11px] text-gray-500">% Diện tích vết bỏng / Toàn ảnh</span>
+                  <span class="text-[13px] font-medium text-gray-700">Tỉ lệ trên toàn khung ảnh</span>
+                  <span class="text-[11px] text-gray-400">% Pixel bỏng / Toàn ảnh (Không dùng tính Parkland)</span>
                 </div>
-                <span id="metric-frame-ratio" class="text-[16px] font-bold text-blue-600 tabular-nums">50,8 %</span>
+                <span id="metric-frame-ratio" class="text-[14px] font-semibold text-gray-500 tabular-nums">50,8 %</span>
               </div>
 
-              <!-- Row 3: Real Area cm2 -->
-              <div class="flex items-center justify-between p-3.5 bg-white">
+              <!-- Row 3 (Anatomical Mode): Burn / Visible Body Part Skin Area -->
+              <div id="row-metric-burn-skin" class="flex items-center justify-between p-3.5 bg-white">
                 <div class="flex flex-col">
-                  <span class="text-[13px] font-medium text-gray-900">Diện tích quy đổi thực tế</span>
-                  <span id="metric-calib-hint" class="text-[11px] text-gray-500">Dựa theo thước đo (48,1 px/cm)</span>
+                  <span class="text-[13px] font-semibold text-gray-900">Tỉ lệ Vết bỏng / Vùng da chụp được</span>
+                  <span id="metric-skin-in-frame-hint" class="text-[11px] text-indigo-600">Đã lọc phông nền (Vùng da chiếm 72% ảnh)</span>
                 </div>
-                <span id="metric-area-cm2" class="text-[18px] font-extrabold text-emerald-600 tabular-nums">11,1 cm²</span>
+                <span id="metric-burn-skin-ratio" class="text-[16px] font-bold text-indigo-600 tabular-nums">45,4 %</span>
               </div>
 
-              <!-- Row 4: % TBSA Wallace -->
-              <div class="flex items-center justify-between p-3.5 bg-blue-50/50">
+              <!-- Row 4 (Ruler Mode Only): Real Area cm2 + Body BSA -->
+              <div id="row-metric-area-cm2" class="hidden flex items-center justify-between p-3.5 bg-white">
                 <div class="flex flex-col">
-                  <span class="text-[14px] font-bold text-blue-900">Ước tính % TBSA cơ thể</span>
-                  <span id="metric-body-part-name" class="text-[11px] text-blue-700">Theo Luật số 9 (Cánh tay trái: 9%)</span>
+                  <span class="text-[13px] font-semibold text-gray-900">Diện tích vết bỏng đo từ vật chuẩn</span>
+                  <span id="metric-calib-hint" class="text-[11px] text-gray-500">Chia cho tổng diện tích da cơ thể BSA</span>
                 </div>
-                <span id="metric-tbsa-pct" class="text-[22px] font-extrabold text-blue-700 tabular-nums">4,6 %</span>
+                <span id="metric-area-cm2" class="text-[17px] font-extrabold text-emerald-600 tabular-nums">-- cm²</span>
               </div>
+
+              <!-- Row 5: % TBSA Normalized -->
+              <div class="flex items-center justify-between p-3.5 bg-blue-50/70">
+                <div class="flex flex-col pr-2">
+                  <span class="text-[14px] font-bold text-blue-950">Chuẩn hóa % TBSA cơ thể</span>
+                  <span id="metric-body-part-name" class="text-[11px] text-blue-800 font-medium">Theo Quy tắc Bàn tay 1%</span>
+                  <span id="metric-tbsa-formula" class="text-[10.5px] text-blue-600/90 mt-0.5">60,0% da × 1% (Bàn tay) = 0,6% TBSA</span>
+                </div>
+                <span id="metric-tbsa-pct" class="text-[22px] font-extrabold text-blue-700 tabular-nums shrink-0">0,6 %</span>
+              </div>
+            </div>
+
+            <!-- Close-up Framing Clinical Warning (if detected) -->
+            <div id="box-framing-warning" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-300 text-[12px] text-amber-950 leading-relaxed flex items-start gap-2">
+              <span class="material-symbols-outlined text-[18px] text-amber-600 shrink-0 mt-0.5">zoom_in</span>
+              <span id="text-framing-warning"></span>
             </div>
 
             <!-- Anatomical Wallace Quick Diagram Box -->
@@ -439,6 +455,11 @@
                 <span id="parkland-total-ml" class="text-[28px] font-extrabold text-[#007AFF] tabular-nums block">1.243 ml</span>
                 <span id="parkland-fluid-type-label" class="text-[12px] text-gray-500 font-medium">Dung dịch Ringer Lactate</span>
               </div>
+            </div>
+
+            <!-- Anatomical Normalization Provenance Note -->
+            <div id="parkland-normalization-banner" class="p-3 rounded-xl bg-blue-50/70 border border-blue-200/70 text-[12px] text-blue-950 leading-relaxed">
+              <!-- Dynamically populated by viewer.js -->
             </div>
 
             <!-- Clinical Indication Notice Box -->

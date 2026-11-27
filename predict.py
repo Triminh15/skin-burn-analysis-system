@@ -34,7 +34,9 @@ from albumentations.pytorch import ToTensorV2
 
 from src.vision.models import build_segmentation_model, build_classification_model
 from src.vision.postprocessing import clean_binary_mask, calculate_burn_area_percentage, get_burn_bounding_box, crop_roi
+from src.vision.anatomical_tbsa import compute_anatomical_tbsa, ANATOMICAL_REGIONS
 from src.vision.transforms import IMAGENET_MEAN, IMAGENET_STD
+from src.utils.gradcam import GradCAM, get_target_layer_for_model
 
 
 CLASS_NAMES = ["Bỏng Độ 1 (Erythema)", "Bỏng Độ 2 (Blisters)", "Bỏng Độ 3 (Full Thickness)"]
@@ -44,16 +46,29 @@ CLASS_COLORS = ["#22c55e", "#eab308", "#ef4444"] # Xanh lá - Vàng - Đỏ
 def load_pipeline_models(
     seg_checkpoint: str,
     cls_checkpoint: str,
-    device: str = "cpu"
+    device: str = "cpu",
+    seg_arch: Optional[str] = None,
 ) -> Tuple[torch.nn.Module, torch.nn.Module]:
     """
     Nạp 2 mô hình vô địch tốt nhất của Giai đoạn 1 và Giai đoạn 2.
+    Tự động phát hiện EA-UNet hoặc U-Net thông thường dựa trên checkpoint.
     """
-    print("🧠 Đang nạp mô hình Giai đoạn 1: U-Net (ResNet-34)...")
-    seg_model = build_segmentation_model(arch="unet", backbone="resnet34", classes=1, pretrained=False)
+    state_dict = None
     if os.path.exists(seg_checkpoint):
         checkpoint = torch.load(seg_checkpoint, map_location=device)
         state_dict = checkpoint.get("model_state_dict", checkpoint)
+
+    # Nhận diện kiến trúc tự động nếu không chỉ định rõ
+    if seg_arch is None:
+        if state_dict is not None and any("core_branch" in k or "gated_fusion" in k for k in state_dict.keys()):
+            seg_arch = "ea_unet"
+        else:
+            seg_arch = "unet"
+
+    arch_display = "EA-UNet (Dual-Branch)" if seg_arch == "ea_unet" else "U-Net"
+    print(f"🧠 Đang nạp mô hình Giai đoạn 1: {arch_display} (ResNet-34)...")
+    seg_model = build_segmentation_model(arch=seg_arch, backbone="resnet34", classes=1, pretrained=False)
+    if state_dict is not None:
         seg_model.load_state_dict(state_dict)
         print(f"  -> Đã nạp thành công Checkpoint Phân đoạn: {seg_checkpoint}")
     else:
@@ -83,7 +98,9 @@ def predict_pipeline(
     seg_model: torch.nn.Module,
     cls_model: torch.nn.Module,
     device: str = "cpu",
-    output_path: str = "outputs/figures/prediction_result.png"
+    output_path: str = "outputs/figures/prediction_result.png",
+    body_part: str = "chest_abdomen",
+    region_coverage: float = 1.0,
 ) -> Dict[str, Any]:
     """
     Quy trình xử lý hoàn chỉnh từ ảnh thô đến chẩn đoán cuối cùng.
@@ -116,10 +133,17 @@ def predict_pipeline(
     mask_prob_resized = cv2.resize(seg_prob, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     raw_binary_mask = (mask_prob_resized > 0.5).astype(np.uint8) * 255
 
-    # 4. HẬU XỬ LÝ HÌNH THÁI HỌC & TÍNH TOÁN % TBSA
-    print("✂️ [2/3] Đang lọc nhiễu, tính % TBSA và cắt vùng quan tâm (ROI)...")
+    # 4. HẬU XỬ LÝ HÌNH THÁI HỌC & CHUẨN HÓA % TBSA GIẢI PHẪU
+    print("✂️ [2/3] Đang lọc nhiễu, phân đoạn vùng da chụp được và chuẩn hóa % TBSA theo Rule of Nines...")
     cleaned_mask = clean_binary_mask(raw_binary_mask, min_area=50)
     burn_percentage = calculate_burn_area_percentage(cleaned_mask)
+    tbsa_info = compute_anatomical_tbsa(
+        burn_mask=cleaned_mask,
+        image_rgb=orig_rgb,
+        body_part=body_part,
+        region_coverage=region_coverage,
+        calibration_mode="anatomical",
+    )
     bbox = get_burn_bounding_box(cleaned_mask, padding_ratio=0.15)
 
     # Cắt ROI hình vuông 224x224
@@ -134,34 +158,56 @@ def predict_pipeline(
     ])
     cls_input = cls_transforms(image=roi_rgb)["image"].unsqueeze(0).to(device)
 
-    with torch.no_grad():
-        cls_logits = cls_model(cls_input)
-        cls_probs = torch.softmax(cls_logits, dim=1).squeeze().cpu().numpy()
+    # Đảm bảo tensor có thể tính gradient cho Grad-CAM
+    cls_input.requires_grad_(True)
+    cls_logits = cls_model(cls_input)
+    cls_probs = torch.softmax(cls_logits, dim=1).detach().squeeze().cpu().numpy()
 
     pred_class_idx = int(np.argmax(cls_probs))
     pred_class_name = CLASS_NAMES[pred_class_idx]
     pred_confidence = float(cls_probs[pred_class_idx]) * 100.0
 
-    # 6. TRỰC QUAN HÓA KẾT QUẢ TỔNG HỢP (4 Ô LIÊN HOÀN)
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5), dpi=200)
+    # 6. GIẢI THÍCH MÔ HÌNH VỚI GRAD-CAM (XAI)
+    print("🔥 Đang tính toán bản đồ nhiệt kích hoạt Grad-CAM trên layer4...")
+    try:
+        target_layer = get_target_layer_for_model(cls_model, model_name="resnet34")
+        gradcam = GradCAM(cls_model, target_layer)
+        heatmap = gradcam.generate_heatmap(cls_input, class_idx=pred_class_idx)
+        gradcam_overlay, _ = gradcam.overlay_heatmap(roi_rgb, heatmap, alpha=0.55)
+        gradcam.remove_hooks()
+        print("  -> Đã tạo thành công bản đồ nhiệt Grad-CAM.")
+    except Exception as e:
+        print(f"  ⚠️ Cảnh báo Grad-CAM: {e}")
+        gradcam_overlay = roi_rgb.copy()
+
+    # 7. TRỰC QUAN HÓA KẾT QUẢ TỔNG HỢP (5 Ô LIÊN HOÀN)
+    fig, axes = plt.subplots(1, 5, figsize=(25, 5), dpi=200)
 
     # Ô 1: Ảnh gốc
     axes[0].imshow(orig_rgb)
     axes[0].set_title(f"1. Ảnh gốc ban đầu\n({orig_w}x{orig_h} px)", fontsize=11, fontweight="bold")
     axes[0].axis("off")
 
-    # Ô 2: Mặt nạ phân đoạn phủ lên vết thương
+    # Ô 2: Mặt nạ phân đoạn phủ lên vết thương + viền vùng da bộ phận
     overlay = orig_rgb.copy()
     colored_mask = np.zeros_like(orig_rgb)
     colored_mask[cleaned_mask > 0] = [0, 255, 255] # Màu Cyan
     overlay = cv2.addWeighted(overlay, 0.7, colored_mask, 0.3, 0)
+    skin_mask = tbsa_info.get("skin_mask")
+    if skin_mask is not None and tbsa_info["pct_skin_in_frame"] < 97.0:
+        skin_contours, _ = cv2.findContours(skin_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(overlay, skin_contours, -1, (0, 180, 255), 2)
     contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cv2.drawContours(overlay, contours, -1, (0, 255, 0), 2) # Viền xanh lá
     if bbox is not None:
         cv2.rectangle(overlay, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2) # Hộp bao ROI màu đỏ
 
     axes[1].imshow(overlay)
-    axes[1].set_title(f"2. Khoanh vùng U-Net\nDiện tích: {burn_percentage}% khung hình", fontsize=11, fontweight="bold")
+    axes[1].set_title(
+        f"2. Khoanh vùng U-Net & Vùng da\nBỏng/Da: {tbsa_info['pct_burn_of_skin']}% → {tbsa_info['estimated_tbsa_pct']}% TBSA",
+        fontsize=10.5,
+        fontweight="bold",
+    )
     axes[1].axis("off")
 
     # Ô 3: Vùng quan tâm (ROI 224x224)
@@ -169,41 +215,52 @@ def predict_pipeline(
     axes[2].set_title(f"3. Vùng ROI đệm vuông\n(224x224 px)", fontsize=11, fontweight="bold")
     axes[2].axis("off")
 
-    # Ô 4: Biểu đồ phân bố xác suất cấp độ
+    # Ô 4: Bản đồ nhiệt Grad-CAM (Giải thích vùng AI chú ý)
+    axes[3].imshow(gradcam_overlay)
+    axes[3].set_title(f"4. Giải thích Grad-CAM\n(Vùng nhiệt kích hoạt trên layer4)", fontsize=11, fontweight="bold")
+    axes[3].axis("off")
+
+    # Ô 5: Biểu đồ phân bố xác suất cấp độ
     y_pos = np.arange(len(CLASS_NAMES))
-    axes[3].barh(y_pos, cls_probs * 100.0, color=CLASS_COLORS, edgecolor="black", height=0.55)
-    axes[3].set_yticks(y_pos)
-    axes[3].set_yticklabels(["Độ 1", "Độ 2", "Độ 3"], fontsize=11, fontweight="bold")
-    axes[3].set_xlim(0, 100)
-    axes[3].set_xlabel("Độ tin cậy (%)", fontsize=10, fontweight="bold")
-    axes[3].set_title(f"4. Kết luận: {pred_class_name.split()[0]} {pred_class_name.split()[1]}\n(Độ tin cậy: {pred_confidence:.1f}%)",
+    axes[4].barh(y_pos, cls_probs * 100.0, color=CLASS_COLORS, edgecolor="black", height=0.55)
+    axes[4].set_yticks(y_pos)
+    axes[4].set_yticklabels(["Độ 1", "Độ 2", "Độ 3"], fontsize=11, fontweight="bold")
+    axes[4].set_xlim(0, 100)
+    axes[4].set_xlabel("Độ tin cậy (%)", fontsize=10, fontweight="bold")
+    axes[4].set_title(f"5. Kết luận: {pred_class_name.split()[0]} {pred_class_name.split()[1]}\n(Độ tin cậy: {pred_confidence:.1f}%)",
                       fontsize=11, fontweight="bold", color=CLASS_COLORS[pred_class_idx])
 
     for i, v in enumerate(cls_probs * 100.0):
-        axes[3].text(v + 2, i, f"{v:.1f}%", va="center", fontsize=10, fontweight="bold")
+        axes[4].text(v + 2, i, f"{v:.1f}%", va="center", fontsize=10, fontweight="bold")
 
     plt.suptitle("HỆ THỐNG PHÂN TÍCH VẾT BỎNG ĐA PHƯƠNG THÁI (SKIN BURN ANALYSIS PIPELINE)",
-                 fontsize=13, fontweight="bold", y=1.02)
+                 fontsize=14, fontweight="bold", y=1.02)
     plt.tight_layout()
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     plt.savefig(output_path, bbox_inches="tight")
     plt.close()
 
-    print("\n" + "=" * 65)
+    print("\n" + "=" * 72)
     print("📋 KẾT QUẢ CHẨN ĐOÁN LÂM SÀNG TỔNG HỢP:")
-    print("=" * 65)
-    print(f"• Diện tích tổn thương (% TBSA) : {burn_percentage}%")
-    print(f"• Cấp độ bỏng dự đoán          : {pred_class_name}")
-    print(f"• Độ tin cậy (Confidence)      : {pred_confidence:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 1         : {cls_probs[0]*100:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 2         : {cls_probs[1]*100:.2f}%")
-    print(f"  - Xác suất Bỏng Độ 3 (Nặng)  : {cls_probs[2]*100:.2f}%")
+    print("=" * 72)
+    print(f"• Vùng giải phẫu chuẩn hóa       : {tbsa_info['body_part_name']} ({tbsa_info['region_weight_pct']}%)")
+    print(f"• Tỷ lệ Vết bỏng / Khung ảnh     : {burn_percentage}% (KHÔNG dùng tính Parkland)")
+    print(f"• Tỷ lệ Vết bỏng / Vùng da chụp  : {tbsa_info['pct_burn_of_skin']}% (Vùng da = {tbsa_info['pct_skin_in_frame']}% ảnh)")
+    print(f"• Diện tích chuẩn hóa (% TBSA)   : {tbsa_info['estimated_tbsa_pct']}% TBSA")
+    print(f"• Cấp độ bỏng dự đoán            : {pred_class_name}")
+    print(f"• Độ tin cậy (Confidence)        : {pred_confidence:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 1           : {cls_probs[0]*100:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 2           : {cls_probs[1]*100:.2f}%")
+    print(f"  - Xác suất Bỏng Độ 3 (Nặng)    : {cls_probs[2]*100:.2f}%")
     print(f"🖼️ Đã xuất ảnh chẩn đoán trực quan tại: {output_path}")
-    print("=" * 65)
+    print("=" * 72)
 
     return {
         "burn_percentage": burn_percentage,
+        "pct_burn_of_skin": tbsa_info["pct_burn_of_skin"],
+        "estimated_tbsa_pct": tbsa_info["estimated_tbsa_pct"],
+        "body_part": body_part,
         "predicted_class": pred_class_name,
         "confidence": pred_confidence,
         "probabilities": cls_probs,
@@ -214,6 +271,10 @@ def predict_pipeline(
 def main():
     parser = argparse.ArgumentParser(description="Chẩn đoán ảnh vết bỏng bằng chuỗi Pipeline 2 Giai đoạn")
     parser.add_argument("--image", type=str, required=True, help="Đường dẫn đến file ảnh thô cần chẩn đoán")
+    parser.add_argument("--body_part", type=str, default="chest_abdomen", choices=list(ANATOMICAL_REGIONS.keys()),
+                        help="Vùng cơ thể theo Luật số 9 Wallace / Quy tắc bàn tay 1%%")
+    parser.add_argument("--region_coverage", type=float, default=1.0,
+                        help="Tỷ lệ diện tích bộ phận xuất hiện trong khung ảnh (0.1 -> 1.0)")
     parser.add_argument("--seg_checkpoint", type=str, default="outputs/checkpoints/unet_resnet34_focal_tversky_best.pth",
                         help="Đường dẫn file trọng số tốt nhất của U-Net")
     parser.add_argument("--cls_checkpoint", type=str, default="outputs/checkpoints/cls_resnet34_weighted_ce_best.pth",
@@ -236,9 +297,12 @@ def main():
         seg_model=seg_model,
         cls_model=cls_model,
         device=args.device,
-        output_path=args.output
+        output_path=args.output,
+        body_part=args.body_part,
+        region_coverage=args.region_coverage,
     )
 
 
 if __name__ == "__main__":
     main()
+
