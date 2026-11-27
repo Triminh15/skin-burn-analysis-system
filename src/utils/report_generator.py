@@ -60,12 +60,36 @@ def generate_burn_report_pdf(output_pdf_path: str, data: dict, original_img_path
     metrics = data.get("metrics", {})
     cls_data = data.get("classification", {})
 
+    body_label = metrics.get("body_part_name") or metrics.get("body_part", "Chua xac dinh")
+    region_w = metrics.get("region_weight_pct")
+    if region_w is not None:
+        body_label = f"{body_label} ({region_w}% TBSA)"
+
+    area_val = metrics.get("area_cm2")
+    est_area_val = metrics.get("estimated_area_cm2")
+    if area_val:
+        side_eq = round(float(area_val) ** 0.5, 1)
+        area_text = f"{area_val} cm2 (~{side_eq}x{side_eq} cm - Hieu chuan thuoc vat ly)"
+    elif est_area_val:
+        side_eq = round(float(est_area_val) ** 0.5, 1)
+        area_text = f"Khong dung thuoc (tuong duong vung da ~{side_eq}x{side_eq} cm)"
+    else:
+        area_text = "Chua hieu chuan thuoc"
+
+    burn_of_skin = metrics.get("pct_burn_of_skin")
+    skin_in_frame = metrics.get("pct_skin_in_frame")
+    skin_ratio_text = (
+        f"{burn_of_skin} % (tren {skin_in_frame}% vung da nhan dien)"
+        if burn_of_skin is not None else f"{metrics.get('pct_frame_area', 0)} %"
+    )
+
     patient_data = [
-        [Paragraph("<b>Thong so benh nhan</b>", normal_style), Paragraph("<b>Gia tri lam sang</b>", normal_style)],
-        ["Vung ton thuong (Rule of Nines):", str(metrics.get("body_part", "Chua xac dinh"))],
-        ["Dien tich ton thuong (% Khung anh):", f"{metrics.get('pct_frame_area', 0)} %"],
-        ["Dien tich thuc te uoc luong:", f"{metrics.get('area_cm2', 'Chua hieu chuan')} cm2" if metrics.get('area_cm2') else "Chua hieu chuan thuoc"],
-        ["Uoc tinh % TBSA co the:", f"{metrics.get('estimated_tbsa_pct', 0)} %"],
+        [Paragraph("<b>Thong so benh nhan & Giai phau</b>", normal_style), Paragraph("<b>Gia tri lam sang</b>", normal_style)],
+        ["Vung giai phau (Rule of Nines / Palmar):", str(body_label)],
+        ["Ty le Vet bong / Vung da chup duoc:", skin_ratio_text],
+        ["Ty le tren toan khung hinh anh:", f"{metrics.get('pct_frame_area', 0)} % (Khong dung tinh Parkland)"],
+        ["Dien tich be mat ton thuong:", area_text],
+        ["Chuan hoa % TBSA co the:", f"{metrics.get('estimated_tbsa_pct', 0)} % TBSA ({metrics.get('tbsa_method', 'Rule of Nines')})"],
         ["Chan doan cap do bong (ResNet-34):", f"{cls_data.get('predicted_degree', 'N/A')} (Do tin cay: {cls_data.get('confidence', 0)}%)"]
     ]
     t1 = Table(patient_data, colWidths=[200, 320])

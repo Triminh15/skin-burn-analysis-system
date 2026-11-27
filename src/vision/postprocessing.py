@@ -66,8 +66,10 @@ def clean_binary_mask(
 
 def calculate_burn_area_percentage(mask: np.ndarray) -> float:
     """
-    Tính phần trăm diện tích tổn thương do bỏng (% TBSA ước tính):
-    % = (Số pixel màu trắng / Tổng số pixel ảnh) * 100
+    Tính phần trăm diện tích vết bỏng trên tổng khung hình ảnh (% Frame Area):
+    % Frame = (Số pixel màu trắng / Tổng số pixel ảnh) * 100
+    Lưu ý Y khoa: Chỉ số này KHÔNG PHẢI % TBSA cơ thể. Để tính % TBSA chuẩn lâm sàng
+    cho công thức Parkland, sử dụng `compute_anatomical_tbsa` trong `src/vision/anatomical_tbsa.py`.
     """
     if mask is None or mask.size == 0:
         return 0.0

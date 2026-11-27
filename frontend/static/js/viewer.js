@@ -88,7 +88,8 @@ class ResultsViewer {
     const timeEl = document.getElementById('res-timestamp');
 
     if (nameEl) nameEl.innerText = p.name || 'Bệnh nhân vãng lai';
-    if (metaEl) metaEl.innerText = `${p.gender || 'Nam'} · ${p.age || 30} tuổi · ${p.weight_kg || 65} kg`;
+    const heightPart = p.height_cm ? ` · ${p.height_cm} cm` : '';
+    if (metaEl) metaEl.innerText = `${p.gender || 'Nam'} · ${p.age || 30} tuổi${heightPart} · ${p.weight_kg || 65} kg`;
     if (codeEl) codeEl.innerText = data.session_id || 'BS-2024';
     if (timeEl && data.created_at) timeEl.innerText = data.created_at;
 
@@ -172,22 +173,96 @@ class ResultsViewer {
 
     const burnPxEl = document.getElementById('metric-burn-pixels');
     const frameRatioEl = document.getElementById('metric-frame-ratio');
+    const burnSkinRatioEl = document.getElementById('metric-burn-skin-ratio');
+    const skinInFrameHintEl = document.getElementById('metric-skin-in-frame-hint');
+    const calibHintEl = document.getElementById('metric-calib-hint');
     const areaCm2El = document.getElementById('metric-area-cm2');
     const tbsaPctEl = document.getElementById('metric-tbsa-pct');
+    const tbsaFormulaEl = document.getElementById('metric-tbsa-formula');
+    const resDimEl = document.getElementById('viewer-res-dim');
+    const calibBadgeEl = document.getElementById('badge-calib-mode');
+    const framingWarnBox = document.getElementById('box-framing-warning');
+    const framingWarnText = document.getElementById('text-framing-warning');
+
+    if (resDimEl && m.image_dimensions) {
+      resDimEl.innerText = `${m.image_dimensions.replace('x', ' × ')} px`;
+    }
+    if (calibBadgeEl) {
+      calibBadgeEl.innerText = m.calibration_mode === 'ruler' ? 'Thước chuẩn px/cm' : (m.atlas_method || 'Rule of Nines AI');
+    }
+
+    const pctFrame = Number(m.pct_frame_area || 0);
+    const pctBurnSkin = Number(m.pct_burn_of_skin !== undefined ? m.pct_burn_of_skin : pctFrame);
+    const pctSkinFrame = Number(m.pct_skin_in_frame !== undefined ? m.pct_skin_in_frame : 100);
 
     if (burnPxEl) burnPxEl.innerText = `${(m.burn_pixels || 0).toLocaleString()} px`;
-    if (frameRatioEl) frameRatioEl.innerText = `${(m.pct_frame_area || 0).toFixed(1).replace('.', ',')} %`;
-    if (areaCm2El) areaCm2El.innerText = m.area_cm2 ? `${m.area_cm2.toFixed(1).replace('.', ',')} cm²` : '-- cm²';
+    if (frameRatioEl) frameRatioEl.innerText = `${pctFrame.toFixed(1).replace('.', ',')} %`;
+    if (burnSkinRatioEl) burnSkinRatioEl.innerText = `${pctBurnSkin.toFixed(1).replace('.', ',')} %`;
+    if (skinInFrameHintEl) {
+      skinInFrameHintEl.innerText = pctSkinFrame < 98.0
+        ? `Đã tách phông nền (Vùng da chiếm ${pctSkinFrame.toFixed(1).replace('.', ',')}% ảnh)`
+        : 'Vùng da chiếm trọn khung hình ảnh';
+    }
+
+    const rowBurnSkin = document.getElementById('row-metric-burn-skin');
+    const rowAreaCm2 = document.getElementById('row-metric-area-cm2');
+    const isRulerMode = (m.calibration_mode === 'ruler' && Boolean(m.area_cm2));
+
+    if (isRulerMode) {
+      rowBurnSkin?.classList.add('hidden');
+      rowAreaCm2?.classList.remove('hidden');
+      if (areaCm2El) {
+        const sideEq = Math.sqrt(Number(m.area_cm2)).toFixed(1).replace('.', ',');
+        const bsaCm2 = m.bsa_cm2 ? Math.round(Number(m.bsa_cm2)).toLocaleString() : '17.000';
+        areaCm2El.innerText = `${Number(m.area_cm2).toFixed(1).replace('.', ',')} cm²`;
+        if (calibHintEl) {
+          calibHintEl.innerText = `Cỡ ~${sideEq}×${sideEq} cm · Tổng da cơ thể (BSA): ${bsaCm2} cm²`;
+        }
+      }
+    } else {
+      rowBurnSkin?.classList.remove('hidden');
+      rowAreaCm2?.classList.add('hidden');
+    }
+
     if (tbsaPctEl) tbsaPctEl.innerText = `${formatTBSA(m.estimated_tbsa_pct)} %`;
 
-    const regionInfo = BODY_PARTS[m.body_part] || { name: m.body_part, pct: 9.0 };
+    const regionInfo = BODY_PARTS[m.body_part] || {
+      name: m.body_part_name || m.body_part,
+      pct: m.region_weight_pct || 9.0
+    };
+    const regWeight = m.region_weight_pct !== undefined ? m.region_weight_pct : regionInfo.pct;
+    const regName = m.body_part_name || regionInfo.name;
+    const regCov = Number(m.region_coverage || 1.0);
+
     const partNameEl = document.getElementById('metric-body-part-name');
     const regionTitleEl = document.getElementById('card-region-title');
     const regionMaxEl = document.getElementById('card-region-max-tbsa');
 
-    if (partNameEl) partNameEl.innerText = `Theo Luật số 9 (${regionInfo.name}: ${regionInfo.pct}%)`;
-    if (regionTitleEl) regionTitleEl.innerText = `Vùng tổn thương: ${regionInfo.name}`;
-    if (regionMaxEl) regionMaxEl.innerText = `Tối đa ${regionInfo.pct}% TBSA`;
+    if (m.calibration_mode === 'ruler' && m.area_cm2) {
+      const bsaM2 = m.bsa_cm2 ? (Number(m.bsa_cm2) / 10000.0).toFixed(2).replace('.', ',') : '1,70';
+      if (partNameEl) partNameEl.innerText = 'Theo Thước chuẩn Vật lý & BSA Mosteller';
+      if (tbsaFormulaEl) {
+        tbsaFormulaEl.innerText = m.formula_summary || `${Number(m.area_cm2).toFixed(1).replace('.', ',')} cm² / BSA (${bsaM2} m²) = ${formatTBSA(m.estimated_tbsa_pct)}% TBSA`;
+      }
+      if (regionTitleEl) regionTitleEl.innerText = 'Phương pháp: Đo trực tiếp bằng Thước chuẩn';
+      if (regionMaxEl) regionMaxEl.innerText = `BSA: ${bsaM2} m²`;
+    } else {
+      if (partNameEl) partNameEl.innerText = `${m.atlas_method || 'Luật số 9'} (${regName}: ${regWeight}%)`;
+      if (tbsaFormulaEl) {
+        tbsaFormulaEl.innerText = m.formula_summary || `${pctBurnSkin.toFixed(1).replace('.', ',')}% vùng da × ${regWeight}%${regCov < 0.99 ? ` × ${Math.round(regCov * 100)}%` : ''} = ${formatTBSA(m.estimated_tbsa_pct)}% TBSA`;
+      }
+      if (regionTitleEl) regionTitleEl.innerText = `Vùng giải phẫu: ${regName}`;
+      if (regionMaxEl) regionMaxEl.innerText = `Trần ${regWeight}% TBSA`;
+    }
+
+    if (framingWarnBox && framingWarnText) {
+      if (m.framing_warning) {
+        framingWarnText.innerText = m.framing_warning;
+        framingWarnBox.classList.remove('hidden');
+      } else {
+        framingWarnBox.classList.add('hidden');
+      }
+    }
 
     // 5. Tab 2 - Phân loại độ sâu & Xác suất Softmax
     const conf = c.confidence || 0.0;
@@ -257,6 +332,24 @@ class ResultsViewer {
     const tbsa = m.estimated_tbsa_pct || 0.0;
     const isIndicated = (pk && typeof pk.indicated === 'boolean') ? pk.indicated : (tbsa >= 10.0);
     const calculatedMl = (pk && pk.calculated_raw_ml) || (4.0 * (p.weight_kg || 68.0) * tbsa);
+    const normBanner = document.getElementById('parkland-normalization-banner');
+    if (normBanner) {
+      if (m.calibration_mode === 'ruler' && m.area_cm2) {
+        normBanner.innerHTML = `
+          <strong>Quy đổi Vật lý trước khi tính Parkland:</strong>
+          Đo trực tiếp từ thước chuẩn trong ảnh được <code>${Number(m.area_cm2).toFixed(1).replace('.', ',')} cm²</code>
+          chia cho tổng diện tích da cơ thể (BSA Mosteller) → <strong>${formatTBSA(tbsa)}% TBSA thực tế</strong>.
+        `;
+      } else {
+        normBanner.innerHTML = `
+          <strong>Chuẩn hóa Giải phẫu trước khi tính Parkland:</strong>
+          Từ <code>${pctFrame.toFixed(1).replace('.', ',')}%</code> khung ảnh → tách phông nền còn
+          <code>${pctBurnSkin.toFixed(1).replace('.', ',')}%</code> diện tích da vùng <strong>${regName} (${regWeight}%)</strong>
+          ${regCov < 0.99 ? `× <code>${Math.round(regCov * 100)}%</code> khung vùng ` : ''}
+          → <strong>${formatTBSA(tbsa)}% TBSA thực tế</strong> (tránh sai lệch dịch truyền do tiêu cự camera).
+        `;
+      }
+    }
 
     if (indicationAlert) {
       indicationAlert.classList.remove('hidden');
@@ -324,8 +417,10 @@ class ResultsViewer {
       }
     }
 
+    const burnTime = (m.burn_time_hours !== undefined && m.burn_time_hours !== null) ? Number(m.burn_time_hours) : 2.0;
+    const rem8h = Math.max(0.5, 8.0 - burnTime);
     const first8h = isIndicated ? ((pk && pk.first_8h_ml) || (calculatedMl * 0.5)) : 0;
-    const rate8h = isIndicated ? ((pk && pk.rate_first_8h_ml_h) || (first8h / 8.0)) : 0;
+    const rate8h = isIndicated ? ((pk && pk.rate_first_8h_ml_h) || (first8h / rem8h)) : 0;
     const next16h = isIndicated ? (calculatedMl - first8h) : 0;
     const rate16h = isIndicated ? ((pk && pk.rate_next_16h_ml_h) || (next16h / 16.0)) : 0;
 
@@ -334,8 +429,6 @@ class ResultsViewer {
     if (ml16hEl) ml16hEl.innerText = isIndicated ? `${Math.round(next16h).toLocaleString()} ml` : '0 ml';
     if (rate16hEl) rate16hEl.innerText = isIndicated ? `${rate16h.toFixed(1)} ml/h (~${Math.round(rate16h / 3)} gtt/p)` : 'Không truyền tĩnh mạch';
 
-    const burnTime = m.burn_time_hours || 2.0;
-    const rem8h = Math.max(0.5, 8.0 - burnTime);
     if (subtextEl) {
       subtextEl.innerText = isIndicated ?
         `Đã tiêu tốn ${burnTime}h từ khi bỏng · Còn lại ${rem8h.toFixed(1)}h để truyền hết 50% giai đoạn 1` :

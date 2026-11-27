@@ -28,6 +28,14 @@ class AppWizard {
     const activeView = document.getElementById(`view-step-${step}`);
     if (activeView) activeView.classList.remove('hidden');
 
+    if (step === 1) {
+      // Mỗi khi quay về Bước 1 (Khám ca mới), luôn đặt lại về chế độ Chuẩn hóa Giải phẫu AI mặc định
+      CaliperManager.setCalibrationMode('anatomical', true);
+    } else if (step === 2) {
+      // Sau khi view-step-2 hiển thị (clientWidth > 0), tính lại chính xác tỷ lệ khung ảnh
+      requestAnimationFrame(() => CaliperManager.updateGraphics());
+    }
+
     // Cập nhật biểu tượng thanh điều hướng tiến trình
     for (let i = 1; i <= 4; i++) {
       const circle = document.getElementById(`circle-step-${i}`);
@@ -219,6 +227,8 @@ class AppWizard {
     }
 
     appState.selectedFile = file;
+    // Mặc định mọi ảnh mới tải lên đều dùng Chuẩn hóa Giải phẫu AI (tránh kẹt chế độ Thước từ ca trước)
+    CaliperManager.setCalibrationMode('anatomical', true);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -239,9 +249,12 @@ class AppWizard {
       if (previewCard) previewCard.classList.remove('hidden');
       if (btnNext1) btnNext1.removeAttribute('disabled');
 
-      // Nạp ảnh lên Canvas Hiệu chuẩn ở Bước 2
+      // Nạp ảnh lên Canvas Hiệu chuẩn ở Bước 2 và cập nhật hệ số tỷ lệ ảnh gốc
       const calibImg = document.getElementById('img-calib-canvas');
-      if (calibImg) calibImg.src = appState.selectedDataUrl;
+      if (calibImg) {
+        calibImg.onload = () => CaliperManager.updateGraphics();
+        calibImg.src = appState.selectedDataUrl;
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -285,12 +298,15 @@ class AppWizard {
     }
 
     const weightInput = document.getElementById('input-patient-weight');
+    const heightInput = document.getElementById('input-patient-height');
     const nameInput = document.getElementById('input-patient-name');
     const ageInput = document.getElementById('input-patient-age');
     const genderInput = document.getElementById('input-patient-gender');
     const burnTimeInput = document.getElementById('input-burn-time');
 
     const weight = weightInput ? parseFloat(weightInput.value) || 65.0 : 65.0;
+    const heightRaw = heightInput ? parseFloat(heightInput.value) : null;
+    const heightCm = (heightRaw && heightRaw > 30) ? heightRaw : null;
     const patientName = nameInput ? (nameInput.value.trim() || 'Bệnh nhân vãng lai') : 'Bệnh nhân vãng lai';
     const patientAgeRaw = ageInput ? ageInput.value.trim() : '';
     const patientAge = patientAgeRaw ? parseInt(patientAgeRaw, 10) : null;
@@ -351,9 +367,20 @@ class AppWizard {
 
     const formData = new FormData();
     formData.append('file', appState.selectedFile);
-    formData.append('pixels_per_cm', appState.calibPxPerCm);
-    formData.append('body_part', appState.bodyPart);
+    const activeCalibMode = appState.calibrationMode || 'anatomical';
+    formData.append('calibration_mode', activeCalibMode);
+    if (activeCalibMode === 'ruler' && appState.calibPxPerCm > 0) {
+      formData.append('pixels_per_cm', appState.calibPxPerCm);
+      formData.append('body_part', 'ruler_auto');
+      formData.append('region_coverage', 1.0);
+    } else {
+      formData.append('body_part', appState.bodyPart);
+      formData.append('region_coverage', appState.regionCoverage || 1.0);
+    }
     formData.append('weight_kg', weight);
+    if (heightCm !== null) {
+      formData.append('height_cm', heightCm);
+    }
     formData.append('burn_time_hours', burnTime);
     formData.append('patient_name', patientName);
     if (patientAge !== null && !Number.isNaN(patientAge)) {
@@ -425,10 +452,12 @@ window.switchMainView = (mode) => {
 
 window.resetCaliper = () => CaliperManager.reset();
 window.toggleCaliperVisibility = () => CaliperManager.toggleVisibility();
+window.setCalibrationMode = (mode) => CaliperManager.setCalibrationMode(mode);
 window.setCalibPreset = (val, name) => CaliperManager.setPreset(val, name);
 window.recomputeRatio = () => CaliperManager.recomputeRatio();
 window.onBodyPartChange = (val) => CaliperManager.setBodyPart(val);
 window.setBodyPart = (val) => CaliperManager.setBodyPart(val);
+window.setRegionCoverage = (cov) => CaliperManager.setRegionCoverage(cov);
 
 window.onSplitSliderChange = (val) => ResultsViewer.onSplitSliderChange(val);
 window.setViewerDisplayMode = (mode) => ResultsViewer.setDisplayMode(mode);
